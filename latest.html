@@ -337,6 +337,12 @@ h1{font-size:28px;font-weight:800;letter-spacing:-.03em;margin:6px 0 2px;line-he
 .chartbox .hd .chg.up{color:var(--green)} .chartbox .hd .chg.dn{color:var(--red)}
 .chartbox .hd .sub2{font-size:10.5px;color:var(--faint);font-weight:600;margin-top:3px}
 .chartsvg{width:100%;height:auto;display:block;touch-action:none}
+.legend{display:flex;flex-wrap:wrap;gap:6px;padding:12px 6px 4px;border-top:1px solid var(--line);margin-top:6px}
+.legchip{display:inline-flex;align-items:center;gap:6px;background:var(--cell);border:1px solid var(--line);
+  border-radius:99px;padding:6px 11px;font-size:11px;font-weight:700;color:var(--text)}
+.legchip .dot{width:9px;height:9px;border-radius:50%;flex:none}
+.legchip.off{color:var(--faint);opacity:.7}
+.legchip:active{transform:scale(.95)}
 
 .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}
 .statgrid > div{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 11px}
@@ -940,7 +946,16 @@ let doneSummary = null;         // filled after finishSession
 let progressTab = "genel";      // genel | egzersizler | vucut | performans
 let historyOpen = null;         // session index expanded
 let progressExId = null;        // selected exercise in progress
-let progressRange = "3ay";      // 1ay | 3ay | 6ay | tumu
+let progressRange = "3ay";      // 3ay | 6ay | 1yil | tumu
+let hiddenSeries = {};          // {exId:true} -> hidden on the all-lifts chart
+const LINE_COLORS = ["#F5A623","#4ADE80","#60A5FA","#F472B6","#A78BFA","#FBBF24",
+  "#34D399","#FB923C","#22D3EE","#E879F9","#FACC15","#38BDF8","#F87171","#2DD4BF",
+  "#C084FC","#FDE047","#818CF8","#FB7185"];
+function exLineColor(exId){
+  const ids = allEx().filter(e=>e.type!=="bw").map(e=>e.id);
+  const i = ids.indexOf(exId);
+  return LINE_COLORS[i % LINE_COLORS.length];
+}
 
 /* =========================================================
    RENDER DISPATCH
@@ -1802,9 +1817,144 @@ function progressGenel(){
       <div><div class="k">Ort. RPE</div><div class="v">${avgRpe}</div></div>
       <div><div class="k">Son Antr.</div><div class="v" style="font-size:13px">${daysAgo(S.sessions[S.sessions.length-1].date)}</div></div>
     </div>
+    <div class="rangeseg" style="margin-top:4px">
+      ${[['3ay','3 Ay'],['6ay','6 Ay'],['1yil','1 Yıl'],['tumu','Tümü']].map(([id,l])=>
+        `<button class="${progressRange===id?'on':''}" onclick="setRange('${id}')">${l}</button>`).join("")}
+    </div>
+    ${allLiftsChartCard()}
+    ${bodyweightChartCard()}
     ${volumeChartCard()}
   `;
 }
+
+function allLiftsChartCard(){
+  const cutoffDays = {"3ay":90,"6ay":180,"1yil":365,"tumu":99999}[progressRange] || 99999;
+  const cutoff = Date.now() - cutoffDays*86400000;
+
+  // build per-exercise series (weight over time), machine/dumbbell only
+  const exs = allEx().filter(e => e.type!=="bw");
+  const seriesList = exs.map(ex => {
+    const pts = seriesFor(ex.id).filter(p => new Date(p.date).getTime() >= cutoff);
+    return { id:ex.id, name:ex.n, color:exLineColor(ex.id), pts };
+  }).filter(s => s.pts.length >= 1);
+
+  if(!seriesList.some(s => s.pts.length >= 2)){
+    return `<div class="chartbox"><div class="hd"><div><div class="l">Hareket Ağırlıkları</div></div></div>
+      <div style="padding:16px 6px 20px;text-align:center;color:var(--muted);font-size:12px">Grafik için en az 2 kayıtlı antrenman gerekli</div></div>`;
+  }
+
+  // collect all dates across visible (non-hidden) series for x-domain
+  const visible = seriesList.filter(s => !hiddenSeries[s.id]);
+  const activeForScale = visible.length ? visible : seriesList;
+
+  let allDates = [];
+  let mn = Infinity, mx = -Infinity;
+  activeForScale.forEach(s => s.pts.forEach(p => {
+    allDates.push(new Date(p.date).getTime());
+    if(p.kg < mn) mn = p.kg;
+    if(p.kg > mx) mx = p.kg;
+  }));
+  const tMin = Math.min(...allDates), tMax = Math.max(...allDates);
+  if(!isFinite(mn)){ mn = 0; mx = 10; }
+  if(mn === mx){ mn = Math.max(0, mn-5); mx = mx+5; }
+  const padY = (mx-mn)*0.12; mn = Math.max(0, mn-padY); mx = mx+padY;
+
+  const W=340, H=210, PL=34, PR=12, PT=14, PB=28;
+  const iw=W-PL-PR, ih=H-PT-PB;
+  const xOf = t => tMax===tMin ? PL+iw/2 : PL + ((t-tMin)/(tMax-tMin))*iw;
+  const yOf = v => PT + ih - ((v-mn)/(mx-mn))*ih;
+
+  // horizontal grid + y labels
+  let grid = "";
+  for(let i=0;i<=3;i++){
+    const v = mn + (mx-mn)*(i/3);
+    const y = yOf(v);
+    grid += `<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W-PR}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-width="1" opacity=".6"/>`;
+    grid += `<text x="${PL-5}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)" font-weight="600">${Math.round(v)}</text>`;
+  }
+  // x labels: start / mid / end dates
+  let xl = "";
+  [tMin, (tMin+tMax)/2, tMax].forEach(t => {
+    xl += `<text x="${xOf(t).toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="9" fill="var(--muted)" font-weight="600">${trDate(new Date(t).toISOString().slice(0,10))}</text>`;
+  });
+
+  // one polyline per series
+  let lines = "";
+  seriesList.forEach(s => {
+    if(hiddenSeries[s.id] || s.pts.length < 1) return;
+    const d = s.pts.map((p,i)=>`${i?'L':'M'}${xOf(new Date(p.date).getTime()).toFixed(1)} ${yOf(p.kg).toFixed(1)}`).join(" ");
+    lines += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+    // dots
+    s.pts.forEach(p => {
+      lines += `<circle cx="${xOf(new Date(p.date).getTime()).toFixed(1)}" cy="${yOf(p.kg).toFixed(1)}" r="2.6" fill="var(--bg)" stroke="${s.color}" stroke-width="1.6"/>`;
+    });
+  });
+
+  // legend chips (tap to toggle)
+  const legend = seriesList.map(s => {
+    const off = hiddenSeries[s.id];
+    return `<button class="legchip ${off?'off':''}" onclick="toggleSeries('${s.id}')">
+      <span class="dot" style="background:${off?'var(--faint)':s.color}"></span>${esc(s.name)}
+    </button>`;
+  }).join("");
+
+  return `<div class="chartbox">
+    <div class="hd"><div><div class="l">Hareket Ağırlıkları</div><div class="sub2" style="margin-top:2px">Zamanla her hareketin çalışma ağırlığı</div></div></div>
+    <svg class="chartsvg" viewBox="0 0 ${W} ${H}">${grid}${lines}${xl}</svg>
+    <div class="legend">${legend}</div>
+  </div>`;
+}
+
+function bodyweightChartCard(){
+  const log = (S.bwLog||[]).slice().sort((a,b)=> a.date<b.date?-1:1);
+  if(log.length < 2){
+    return `<div class="chartbox"><div class="hd"><div><div class="l">Vücut Ağırlığı</div></div></div>
+      <div style="padding:16px 6px 20px;text-align:center;color:var(--muted);font-size:12px">Grafik için en az 2 kilo kaydı gerekli — İlerleme › Vücut'tan ekleyebilirsin</div></div>`;
+  }
+  const W=340,H=170,PL=34,PR=12,PT=14,PB=28;
+  const iw=W-PL-PR, ih=H-PT-PB;
+  const vals=log.map(b=>b.kg);
+  let mn=Math.min(...vals), mx=Math.max(...vals);
+  if(mn===mx){mn-=2;mx+=2;}
+  const padY=(mx-mn)*0.15; mn-=padY; mx+=padY;
+  const tMin=new Date(log[0].date).getTime(), tMax=new Date(log[log.length-1].date).getTime();
+  const xOf=t=> tMax===tMin ? PL+iw/2 : PL+((t-tMin)/(tMax-tMin))*iw;
+  const yOf=v=>PT+ih-((v-mn)/(mx-mn))*ih;
+  let grid="";
+  for(let i=0;i<=3;i++){
+    const v=mn+(mx-mn)*(i/3), y=yOf(v);
+    grid+=`<line x1="${PL}" y1="${y.toFixed(1)}" x2="${W-PR}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-width="1" opacity=".6"/>`;
+    grid+=`<text x="${PL-5}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)" font-weight="600">${(Math.round(v*10)/10)}</text>`;
+  }
+  const pts = log.map(b=>({t:new Date(b.date).getTime(), v:b.kg}));
+  const d = pts.map((p,i)=>`${i?'L':'M'}${xOf(p.t).toFixed(1)} ${yOf(p.v).toFixed(1)}`).join(" ");
+  const area = `M${xOf(pts[0].t).toFixed(1)} ${(PT+ih).toFixed(1)} ` +
+    pts.map(p=>`L${xOf(p.t).toFixed(1)} ${yOf(p.v).toFixed(1)}`).join(" ") +
+    ` L${xOf(pts[pts.length-1].t).toFixed(1)} ${(PT+ih).toFixed(1)} Z`;
+  const dots = pts.map(p=>`<circle cx="${xOf(p.t).toFixed(1)}" cy="${yOf(p.v).toFixed(1)}" r="2.8" fill="var(--bg)" stroke="var(--amber)" stroke-width="1.8"/>`).join("");
+  let xl="";
+  [tMin,(tMin+tMax)/2,tMax].forEach(t=>{
+    xl+=`<text x="${xOf(t).toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="9" fill="var(--muted)" font-weight="600">${trDate(new Date(t).toISOString().slice(0,10))}</text>`;
+  });
+  const diff = log[log.length-1].kg - log[0].kg;
+  return `<div class="chartbox">
+    <div class="hd">
+      <div><div class="l">Vücut Ağırlığı</div><div class="big">${fmtKg(log[log.length-1].kg)}<small>kg</small></div></div>
+      <div class="right"><div class="chg ${diff<0?'up':'dn'}">${diff>0?'+':''}${fmtKg(diff)} kg</div><div class="sub2">Başlangıçtan</div></div>
+    </div>
+    <svg class="chartsvg" viewBox="0 0 ${W} ${H}">
+      ${grid}
+      <path d="${area}" fill="var(--amber)" opacity=".09"/>
+      <path d="${d}" fill="none" stroke="var(--amber)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}${xl}
+    </svg>
+  </div>`;
+}
+
+window.toggleSeries = function(id){
+  hiddenSeries[id] = !hiddenSeries[id];
+  render();
+};
 
 function volumeChartCard(){
   const last12 = S.sessions.slice(-12);
