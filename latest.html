@@ -411,6 +411,47 @@ textarea#pasteArea:focus{outline:2px solid var(--amber);outline-offset:-1px}
 .warnbox code{font-family:var(--fn);font-size:11.5px;background:var(--cell);padding:1px 5px;border-radius:5px}
 .spacer{height:14px}
 body.resting #app{padding-bottom:calc(var(--nav-h) + 110px)}
+/* ---------- plaka hesabı ---------- */
+.plates{background:var(--card);border-radius:14px;padding:11px 13px;margin:-2px 0 14px}
+.plates .ph{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:9px}
+.plates .ph .lb{font-size:10px;letter-spacing:.13em;font-weight:800;color:var(--faint)}
+.plates .ph .rt{font-size:11px;color:var(--muted);font-family:var(--fn)}
+.plates .chips{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.plates .chip{background:var(--amber);color:#3A2604;font-size:13px;font-weight:800;
+  padding:5px 10px;border-radius:7px;font-family:var(--fn)}
+.plates .cnt{color:var(--faint);font-size:11px;margin-left:3px}
+.plates .none{color:var(--muted);font-size:13px}
+.plates .pstats{display:flex;align-items:flex-start;gap:22px;margin-bottom:2px}
+.plates .ps{display:flex;flex-direction:column;gap:2px}
+.plates .ps .k{font-size:9px;letter-spacing:.14em;font-weight:800;color:var(--faint)}
+.plates .ps .v{font-family:var(--fn);font-size:19px;font-weight:800;color:var(--muted);letter-spacing:-.02em}
+.plates .ps .v i{font-style:normal;font-size:11px;font-weight:700;color:var(--faint);margin-left:2px}
+.plates .ps.hot .v{color:var(--amber);font-size:26px}
+.plates .phide{margin-left:auto;font-size:10px;font-weight:800;color:var(--faint);
+  background:var(--cell);border:1px solid var(--line);border-radius:7px;padding:5px 9px}
+.plates .cnt{color:var(--muted);font-size:12px;font-family:var(--fn)}
+.plates .pfoot{border-top:1px solid var(--line);margin-top:9px;padding-top:9px}
+.plates .pfoot label{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--faint)}
+.plates .pfoot input{width:15px;height:15px;accent-color:var(--amber);margin:0}
+.plates .bigline{font-size:13px;color:var(--muted);margin:0 0 9px}
+.plates .bigline b{color:var(--amber);font-size:17px;font-weight:800;font-family:var(--fn)}
+.plates .bigline .tot{color:var(--faint);font-size:12px}
+.plates .approx{color:var(--faint);font-size:11px;margin-top:7px;line-height:1.5}
+.plates .delta{border-top:1px solid var(--line);margin-top:9px;padding-top:8px;
+  font-size:12px;display:flex;align-items:center;gap:6px;line-height:1.4}
+.plates .delta.up{color:var(--green)} .plates .delta.dn{color:var(--red)}
+.pmodes{display:flex;gap:4px;flex-shrink:0}
+.pmodes button{font-size:10px;font-weight:800;padding:5px 8px;border-radius:7px;
+  color:var(--faint);background:var(--cell);border:1px solid var(--line)}
+.pmodes button.on{color:#3A2604;background:var(--amber);border-color:var(--amber)}
+.wuplates{font-size:11px;color:var(--faint);margin:-6px 0 14px;line-height:1.7;font-family:var(--fn)}
+.hdelta{display:flex;align-items:center;gap:5px;font-size:11px;margin:2px 0 0}
+.hdelta.up{color:var(--green)} .hdelta.dn{color:var(--red)} .hdelta.same{color:var(--faint)}
+.hexrow{padding:7px 0}
+.hexrow .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.hexrow .nm{font-size:13px;color:var(--text)}
+.hexrow .nm small{color:var(--faint);font-size:12px;font-family:var(--fn)}
+.hexrow .rp{font-size:12px;color:var(--muted);font-family:var(--fn);white-space:nowrap}
 </style>
 </head>
 <body>
@@ -791,6 +832,8 @@ const blank = () => ({
   readiness: [],   // {date, sleep, soreness, energy, stress}  (1-5 each)
   name: "",
   setup: false,
+  loadTypes: {},                     // exId -> 'side' | 'total' | 'off'
+  plateSet: [20,15,10,5,2.5,1.25],   // salondaki plakalar (kg)
 });
 let S = blank();
 
@@ -872,6 +915,171 @@ function warmups(ex){
   if(ex.type === "main") return [0.6,0.7,0.85].map(p => mround(w*p,2.5)).filter(x=>x>=2.5);
   if(ex.type === "sec" || ex.type === "sec4") return [0.5,0.75].map(p => mround(w*p,2.5)).filter(x=>x>=2.5);
   return [];
+}
+
+/* =========================================================
+   PLAKA HESAPLAYICI
+   ========================================================= */
+/* Dumbbell ve vücut ağırlığı hareketlerinde plaka takmıyorsun */
+const NO_PLATES = ["b2","b5","b6","c6"];
+const ALL_PLATES = [25,20,15,10,5,2.5,2,1.25,1];
+/* Plakalarda 1.25 gibi degerler var — fmtKg 1 ondalikla yuvarlayip 1.3 yapiyor */
+const fmtP = v => (Math.round(v*100)/100).toString();
+window.togglePlate = function(p){
+  if(!S.plateSet) S.plateSet = [20,15,10,5,2.5,1.25];
+  const i = S.plateSet.indexOf(p);
+  if(i === -1) S.plateSet.push(p); else S.plateSet.splice(i,1);
+  S.plateSet.sort((a,b)=>b-a); save(); render();
+};
+
+function loadTypeOf(exId){
+  if(NO_PLATES.indexOf(exId) !== -1) return "off";
+  if(S.loadTypes && S.loadTypes[exId]) return S.loadTypes[exId];
+  return "total";                     // varsayilan: girilen kg hedef toplam, ikiye bolunur
+}
+window.setLoadType = function(exId, t){
+  if(!S.loadTypes) S.loadTypes = {};
+  S.loadTypes[exId] = t; save(); render();
+};
+
+function plateSet(){
+  const p = (S.plateSet && S.plateSet.length ? S.plateSet : [20,15,10,5,2.5,1.25]).slice();
+  return p.sort((a,b)=>b-a);
+}
+
+/* Aç gözlü dağıtım. Bu plaka setinde (her plaka kendinden küçüklerin katı)
+   daima mümkün olan en az plaka sayısını verir. */
+function platesFor(perSide){
+  const out = [];
+  let rem = Math.round(perSide*100)/100;
+  for(const p of plateSet()){
+    while(rem >= p - 0.001){ out.push(p); rem = Math.round((rem-p)*100)/100; }
+  }
+  return { plates: out, left: rem, exact: Math.round(out.reduce((a,b)=>a+b,0)*100)/100 };
+}
+
+/* Girilen kg -> bir tarafa düşen kg */
+function perSideKg(exId, kg){
+  return loadTypeOf(exId) === "total" ? kg/2 : kg;
+}
+
+function plateCounts(list){
+  const c = {}; list.forEach(p=>c[p]=(c[p]||0)+1); return c;
+}
+
+function plateListText(perSide){
+  const r = platesFor(perSide);
+  if(!r.plates.length) return "boş";
+  const c = plateCounts(r.plates);
+  return Object.keys(c).map(Number).sort((a,b)=>b-a)
+    .map(p => c[p]>1 ? c[p]+"×"+fmtP(p) : fmtP(p)).join("+");
+}
+
+/* İki ağırlık arasında hangi plakalar eklenir / çıkarılır */
+function plateDiff(fromPerSide, toPerSide){
+  const c = plateCounts(platesFor(toPerSide).plates);
+  platesFor(fromPerSide).plates.forEach(p=>c[p]=(c[p]||0)-1);
+  const add=[], rem=[];
+  Object.keys(c).map(Number).sort((x,y)=>y-x).forEach(p=>{
+    if(c[p]>0) add.push(c[p]+"× "+fmtP(p));
+    if(c[p]<0) rem.push((-c[p])+"× "+fmtP(p));
+  });
+  return {add, rem};
+}
+
+/* Bu hareketin en son kaydedilmiş ağırlığı */
+function lastKgFor(exId){
+  for(let i=S.sessions.length-1;i>=0;i--){
+    const e = S.sessions[i].entries[exId];
+    if(e && e.kg != null) return e.kg;
+  }
+  return null;
+}
+
+/* Plakalarin gorsel dizilimi — sabit viewBox, boylece her agirlikta ayni olcek */
+function plateBarSVG(list){
+  const H = 78, CY = 40;
+  const hOf = p => 12 + 48*Math.pow(p/20, .6);
+  const wOf = p => 7 + 9*Math.sqrt(p/20);
+  let x = 16, parts = "";
+  list.forEach(p=>{
+    const h = hOf(p), w = wOf(p);
+    const fill = p >= 5 ? "var(--amber)" : "var(--amber-deep)";
+    parts += `<rect x="${x}" y="${CY-h/2}" width="${w}" height="${h}" rx="2.5" fill="${fill}"/>`;
+    if(w >= 9) parts += `<text x="${x+w/2}" y="${CY}" transform="rotate(-90 ${x+w/2} ${CY})"
+      text-anchor="middle" dominant-baseline="central" font-size="8.5" font-weight="700"
+      fill="#3A2604" font-family="ui-monospace,monospace">${fmtP(p)}</text>`;
+    x += w + 2;
+  });
+  const tail = Math.max(x + 26, 120);
+  return `<svg width="100%" height="${H}" viewBox="0 0 300 ${H}"
+    preserveAspectRatio="xMinYMid meet" style="display:block">
+    <rect x="0" y="${CY-30}" width="7" height="60" rx="2.5" fill="var(--line-hi)"/>
+    <rect x="7" y="${CY-4}" width="${tail-7}" height="8" rx="3" fill="var(--line-hi)"/>
+    ${parts}
+  </svg>`;
+}
+
+function plateCard(ex, kg){
+  const t = loadTypeOf(ex.id);
+  if(ex.type === "bw" || kg == null) return "";
+  if(NO_PLATES.indexOf(ex.id) !== -1) return "";
+  if(t === "off"){
+    return `<div class="plates" style="padding:8px 13px">
+      <div class="ph" style="margin:0">
+        <span class="lb">PLAKA HESABI KAPALI</span>
+        <div class="pmodes">
+          <button onclick="event.stopPropagation();setLoadType('${ex.id}','total')">toplam</button>
+          <button onclick="event.stopPropagation();setLoadType('${ex.id}','side')">her kola</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  const per = perSideKg(ex.id, kg);
+  const r = platesFor(per);
+
+  const chips = r.plates.length
+    ? `<span class="cnt">${plateListText(per)} · ${r.plates.length} plaka</span>`
+    : `<span class="none">plakasız</span>`;
+
+  const approx = r.left > 0.01
+    ? `<div class="approx">Tam tutmuyor — bu plakalarla her tarafa ${fmtP(r.exact)} kg olur (${fmtP(r.left)} kg eksik). Kayıt ${fmtKg(kg)} kg olarak kalır.</div>`
+    : "";
+
+  /* Referans: ısınmanın son seti, yoksa geçen antrenmanın ağırlığı */
+  const wu = warmups(ex);
+  let ref = wu.length ? perSideKg(ex.id, wu[wu.length-1]) : null;
+  let refLbl = "Isınmadan";
+  if(ref == null){
+    const lk = lastKgFor(ex.id);
+    if(lk != null && lk !== kg){ ref = perSideKg(ex.id, lk); refLbl = "Geçen sefere göre"; }
+  }
+  let delta = "";
+  if(ref != null && Math.abs(ref-per) > 0.01){
+    const d = plateDiff(ref, per);
+    const parts = [];
+    if(d.add.length) parts.push("ekle "+d.add.join(" + "));
+    if(d.rem.length) parts.push("çıkar "+d.rem.join(" + "));
+    if(parts.length) delta = `<div class="delta ${per>ref?'up':'dn'}">${per>ref?'▲':'▼'} ${refLbl}, her tarafa ${parts.join(" · ")}</div>`;
+  }
+
+  const total = t === "total" ? kg : per*2;
+
+  return `<div class="plates">
+    <div class="pstats">
+      <div class="ps"><span class="k">TOPLAM</span><span class="v">${fmtP(total)}<i>kg</i></span></div>
+      <div class="ps hot"><span class="k">HER KOLA</span><span class="v">${fmtP(per)}<i>kg</i></span></div>
+      <button class="phide" onclick="event.stopPropagation();setLoadType('${ex.id}','off')">gizle</button>
+    </div>
+    ${plateBarSVG(r.plates)}
+    <div class="chips">${chips}</div>
+    ${approx}${delta}
+    <div class="pfoot">
+      <label><input type="checkbox" ${t==='side'?'checked':''}
+        onclick="event.stopPropagation();setLoadType('${ex.id}',this.checked?'side':'total')">
+        Bu makine her kola ayrı yükleniyor</label>
+    </div>
+  </div>`;
 }
 
 function seriesFor(exId){
@@ -1371,7 +1579,9 @@ function renderDetail(){
     </div>
 
     ${wu.length ? `<div class="tbl-label">Isınma Setleri</div>
-    <div class="settbl">${warmRows}</div>` : ''}
+    <div class="settbl">${warmRows}</div>
+    ${loadTypeOf(ex.id)!=="off" ? `<div class="wuplates">Isınma, her tarafa: ${
+      wu.map(w=>fmtP(perSideKg(ex.id,w))+" → "+plateListText(perSideKg(ex.id,w))).join("  ·  ")}</div>` : ''}` : ''}
 
     <div class="tbl-label">Çalışma Setleri</div>
     <div class="settbl">
@@ -1386,7 +1596,8 @@ function renderDetail(){
       <button onclick="adjustKg(-2.5)">−</button>
       <div class="val"><span class="n">${fmtKg(en.kg)}</span><span class="u">kg</span></div>
       <button onclick="adjustKg(2.5)">+</button>
-    </div>` : '<div class="spacer"></div>'}
+    </div>
+    ${plateCard(ex, en.kg)}` : '<div class="spacer"></div>'}
 
     ${padTarget.mode === 'reps' ? renderNumpad(ex, en) : renderRpePanel(ex, en)}
 
@@ -1693,6 +1904,35 @@ window.cancelReadiness = function(){
 /* =========================================================
    HISTORY
    ========================================================= */
+/* Bu hareketin bir onceki seansina gore degisim.
+   Takvimdeki onceki antrenmanla degil — ayni hareketin son kaydiyla kiyaslar. */
+function prevEntry(exId, beforeIdx){
+  for(let i=beforeIdx-1;i>=0;i--){
+    const e = S.sessions[i].entries[exId];
+    if(e) return e;
+  }
+  return null;
+}
+function changeLine(ex, s, idx){
+  const e = s.entries[ex.id]; if(!e) return "";
+  const p = prevEntry(ex.id, idx);
+  if(!p) return `<div class="hdelta same">◆ ilk kayıt</div>`;
+
+  if(ex.type === "bw"){
+    const cur = Math.max(0, ...(e.reps||[]).map(r=>r||0));
+    const old = Math.max(0, ...(p.reps||[]).map(r=>r||0));
+    if(!cur || !old) return `<div class="hdelta same">— sabit</div>`;
+    const d = cur - old;
+    if(d === 0) return `<div class="hdelta same">— sabit (${old})</div>`;
+    return `<div class="hdelta ${d>0?'up':'dn'}">${d>0?'▲':'▼'} ${d>0?'+':''}${d} tekrar — önceki ${old}</div>`;
+  }
+
+  if(e.kg == null || p.kg == null) return `<div class="hdelta same">— sabit</div>`;
+  const d = Math.round((e.kg - p.kg)*10)/10;
+  if(d === 0) return `<div class="hdelta same">— sabit (${fmtKg(p.kg)} kg)</div>`;
+  return `<div class="hdelta ${d>0?'up':'dn'}">${d>0?'▲':'▼'} ${d>0?'+':''}${fmtKg(d)} kg — önceki ${fmtKg(p.kg)}</div>`;
+}
+
 function renderHistoryScreen(){
   if(!S.sessions.length){
     $app.innerHTML = `
@@ -1712,7 +1952,13 @@ function renderHistoryScreen(){
     const detailRows = expanded ? wo.ex.map(ex=>{
       const e = s.entries[ex.id]; if(!e) return "";
       const reps = e.reps.map(r=>r==null?'—':r).join(' · ');
-      return `<div class="row"><div class="n">${esc(ex.n)}${e.kg?` <span style="color:var(--faint)">(${fmtKg(e.kg)} kg)</span>`:''}</div><div class="r">${reps}</div></div>`;
+      return `<div class="hexrow">
+        <div class="top">
+          <div class="nm">${esc(ex.n)}${e.kg!=null?` <small>${fmtKg(e.kg)} kg</small>`:''}</div>
+          <div class="rp">${reps}</div>
+        </div>
+        ${changeLine(ex, s, realIdx)}
+      </div>`;
     }).join("") : "";
     return `<div class="hcard" onclick="toggleHist(${realIdx})">
       <div class="hd">
@@ -2245,6 +2491,17 @@ function renderSettings(){
     </div>
     <p class="note">Ağırlık: bir sonraki antrenmanda kullanacağın kilo. Artış: hedefi tutturduğunda eklenecek kilo — salonundaki makinenin kademesine göre ayarla.</p>
     ${blocks}
+    <div class="divider"></div>
+    <h2>Plakalar</h2>
+    <div class="card">
+      <div class="chips" style="display:flex;gap:6px;flex-wrap:wrap;padding:4px 0">
+        ${ALL_PLATES.map(p=>`<button class="${(S.plateSet||[]).indexOf(p)!==-1?'chip on':'chip'}"
+          style="font-size:13px;font-weight:800;padding:8px 13px;border-radius:9px;font-family:var(--fn);
+          ${(S.plateSet||[]).indexOf(p)!==-1?'background:var(--amber);color:#3A2604':'background:var(--cell);color:var(--faint);border:1px solid var(--line)'}"
+          onclick="togglePlate(${p})">${fmtP(p)}</button>`).join("")}
+      </div>
+    </div>
+    <p class="note">Salonunda bulunan plakaları seç. Hareket ekranındaki hesap bunlara göre yapılır. Tek taraf / toplam ayarını her hareketin kendi ekranından değiştirebilirsin.</p>
     <div class="divider"></div>
     <h2>Veri</h2>
     <button class="btn ghost sm" style="margin-bottom:10px" onclick="exportData()">Verilerimi Dışa Aktar (JSON)</button>
