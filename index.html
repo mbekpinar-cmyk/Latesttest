@@ -805,6 +805,11 @@ const PROGRAM = {
   ]},
 };
 const ORDER = ["A","B","C"];
+/* Taninmayan bir antrenman harfi (bozuk/elle duzenlenmis veri, eski surum)
+   uygulamayi tamamen cokertmesin — bos bir iskelet don. */
+function programOf(key){
+  return PROGRAM[key] || { name: key ? `Bilinmeyen antrenman (${key})` : "Bilinmeyen antrenman", ex: [] };
+}
 /* Programdan cikarilmis hareketler — gecmis kayitlar bunlara hala bagli,
    hacim/set toplamlarinin dogru hesaplanmasi icin burada tutuyoruz.
    Aktif antrenman listesinde gorunmezler. */
@@ -846,6 +851,7 @@ const blank = () => ({
   loadTypes: {},                     // exId -> 'side' | 'total' | 'off'
   plateSet: [20,15,10,5,2.5,1.25],   // salondaki plakalar (kg)
   migratedTieredProgression: false,
+  live: null,                        // yarim kalmis antrenman (uygulama kapanirsa kaybolmasin)
 });
 let S = blank();
 
@@ -862,8 +868,10 @@ function checkStorage(){
   }catch(e){ storageOK = false; }
   return storageOK;
 }
+let liveRestored = false;   // restoreLiveSession() calisana kadar S.live'a dokunma
 function save(){
   try{
+    if(liveRestored) S.live = live;   // aktif antrenmani da yaz
     localStorage.setItem(KEY, JSON.stringify(S));
     storageOK = true;
     return true;
@@ -1370,7 +1378,7 @@ function renderHome(){
     <div class="lastcard" onclick="expandLast(${nSess-1})">
       <div class="toprow">
         <div style="flex:1">
-          <div class="n">${esc(PROGRAM[last.w].name)}</div>
+          <div class="n">${esc(programOf(last.w).name)}</div>
         </div>
         <div class="ago">${daysAgo(last.date)}</div>
       </div>
@@ -1536,7 +1544,7 @@ function renderSession(){
 
 window.cancelSession = function(){
   if(confirm("Antrenmanı iptal et? Girdiğin veriler silinir.")){
-    live=null; stopRest(); view="home"; render();
+    live=null; save(); stopRest(); view="home"; render();
   }
 };
 
@@ -1587,12 +1595,12 @@ function renderDetail(){
     const isTarget = padTarget && padTarget.setIdx === i;
     const filled = r != null;
     const rpe = en.rpe[i];
-    return `<div class="setrow ${filled?'filled':'empty'} ${isTarget?'active':''}" onclick="selectSet(${i})">
-      <div class="c1">${i+1}</div>
-      <div class="c2"><span class="kgv">${fmtKg(en.kg)}</span><span class="kgu">kg</span><span class="x">×</span></div>
-      <div class="c3"><span class="repcell">${r??'?'}</span></div>
-      <div class="c4">${rpe??'–'}</div>
-      <div class="c5"><div class="tick">${filled?iconSVG('check'):''}</div></div>
+    return `<div class="setrow ${filled?'filled':'empty'} ${isTarget?'active':''}">
+      <div class="c1" onclick="selectSet(${i},'reps')">${i+1}</div>
+      <div class="c2" onclick="selectSet(${i},'reps')"><span class="kgv">${fmtKg(en.kg)}</span><span class="kgu">kg</span><span class="x">×</span></div>
+      <div class="c3" onclick="selectSet(${i},'reps')"><span class="repcell">${r??'?'}</span></div>
+      <div class="c4" onclick="selectSet(${i},'rpe')">${rpe??'–'}</div>
+      <div class="c5" onclick="selectSet(${i},'reps')"><div class="tick">${filled?iconSVG('check'):''}</div></div>
     </div>`;
   }).join("");
 
@@ -1642,10 +1650,12 @@ function renderDetail(){
   `;
 }
 
-window.selectSet = function(i){
+window.selectSet = function(i, mode){
   const en = live.entries[detailExId];
   padTarget.setIdx = i;
-  padTarget.mode = en.reps[i] != null ? 'rpe' : 'reps';
+  /* mode acikca verilmisse ona uy; verilmemisse: bos set -> tekrar gir,
+     dolu set -> tekrari DUZELTMEYE ac (yanlis basildiginda geri donebilmek icin). */
+  padTarget.mode = mode || 'reps';
   render();
 };
 
@@ -1659,8 +1669,12 @@ window.adjustKg = function(delta){
 function renderNumpad(ex, en){
   const nums = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
   const btns = nums.map(n=>`<button onclick="enterRep(${n})">${n}</button>`).join("");
+  const cur = en.reps[padTarget.setIdx];
+  const head = cur != null
+    ? `Set ${padTarget.setIdx+1} — düzelt (şu an ${cur})`
+    : `Set ${padTarget.setIdx+1} — Kaç tekrar yaptın?`;
   return `<div class="numpad">
-    <div class="head">Set ${padTarget.setIdx+1} — Kaç tekrar yaptın?</div>
+    <div class="head">${head}</div>
     <div class="pad">
       ${btns}
       <button onclick="enterRep(0)">0</button>
@@ -1679,8 +1693,12 @@ function renderRpePanel(ex, en){
     {n:10,l:"Maks.<br>yapamazdım"},
   ];
   const btns = opts.map(o=>`<button onclick="enterRpe(${o.n})"><span class="n">${o.n}</span><span class="l">${o.l}</span></button>`).join("");
+  const curRpe = en.rpe[padTarget.setIdx];
+  const head = curRpe != null
+    ? `Set ${padTarget.setIdx+1} — düzelt (şu an RPE ${curRpe})`
+    : `Set ${padTarget.setIdx+1} — Ne kadar zorlandın?`;
   return `<div class="rpepanel">
-    <div class="head">Set ${padTarget.setIdx+1} — Ne kadar zorlandın?</div>
+    <div class="head">${head}</div>
     <div class="rpegrid">${btns}</div>
     <div class="skipline"><button class="tinylink" onclick="skipRpe()">RPE'siz devam et</button></div>
   </div>`;
@@ -1689,11 +1707,15 @@ function renderRpePanel(ex, en){
 window.enterRep = function(v){
   const en = live.entries[detailExId];
   const ex = findEx(detailExId);
+  const wasEmpty = en.reps[padTarget.setIdx] == null;
   en.reps[padTarget.setIdx] = v;
   save();
-  // start rest & advance to RPE mode
-  startRest(REST[ex.type] || 90);
-  padTarget.mode = 'rpe';
+  if(wasEmpty){
+    /* yeni set girisi — mola baslat ve RPE'ye gec */
+    startRest(REST[ex.type] || 90);
+    padTarget.mode = 'rpe';
+  }
+  /* duzeltme ise: mola baslatma, ekranda kal ki sonucu gorebilsin */
   render();
 };
 window.clearRep = function(){
@@ -1708,7 +1730,9 @@ window.moreReps = function(){
   const v = prompt("Tekrar sayısı:");
   if(v==null) return;
   const n = parseInt(v,10);
-  if(!isNaN(n) && n>=0) enterRep(n);
+  if(isNaN(n) || n<0) return;
+  if(n>200){ alert("Bu sayı fazla yüksek görünüyor. En fazla 200 girebilirsin."); return; }
+  enterRep(n);
 };
 window.enterRpe = function(v){
   const en = live.entries[detailExId];
@@ -1762,7 +1786,8 @@ window.finishSession = function(){
   });
   S.sessions.push(rec);
   S.nextIdx = (S.nextIdx + 1) % 3;
-  save();
+  live = null;              // once temizle, sonra kaydet — yoksa bitmis antrenman
+  save();                   // "yarim kalmis" olarak geri gelir
 
   const totalVol = sessionVolume(rec);
   const totalSets = sessionSets(rec);
@@ -2024,7 +2049,7 @@ function renderHistoryScreen(){
   }
   const items = S.sessions.slice().reverse().map((s,ri)=>{
     const realIdx = S.sessions.length-1-ri;
-    const wo = PROGRAM[s.w];
+    const wo = programOf(s.w);
     const vol = sessionVolume(s);
     const avgRpe = sessionAvgRpe(s);
     const expanded = historyOpen === realIdx;
@@ -2781,13 +2806,40 @@ function migrateB2u(){
   save();
 }
 
+/* Yarim kalmis antrenmani geri yukle — uygulama kazara kapandiysa
+   girdigin setler kaybolmasin. Cok eski (24 saatten fazla) kayitlari
+   sormadan atmiyoruz; kullaniciya birakiyoruz. */
+function restoreLiveSession(){
+  if(!S.live || !S.live.w || !PROGRAM[S.live.w]) { S.live = null; liveRestored = true; return; }
+  live = S.live;
+  liveRestored = true;
+  /* Program degismisse (yeni hareket eklendi vb.) eksik girisleri tamamla */
+  PROGRAM[live.w].ex.forEach(ex => {
+    if(!live.entries[ex.id]){
+      live.entries[ex.id] = { kg: ex.type==="bw" ? null : S.weights[ex.id],
+                              reps: new Array(ex.sets).fill(null),
+                              rpe:  new Array(ex.sets).fill(null) };
+    }
+  });
+  view = "session";
+  const ago = live.startTime ? Math.round((Date.now()-live.startTime)/60000) : null;
+  const agoTxt = ago == null ? "" : ago < 60 ? ` (${ago} dk önce başladı)` :
+                 ` (${Math.round(ago/60)} saat önce başladı)`;
+  setTimeout(()=>{
+    const cont = confirm(`Yarım kalmış bir ${PROGRAM[live.w].name} antrenmanın var${agoTxt}.\n\nKaldığın yerden devam etmek ister misin?\n\nTamam = devam et\nİptal = bu antrenmanı sil`);
+    if(!cont){ live = null; view = "home"; save(); }
+    render();
+  }, 100);
+}
+
 /* =========================================================
    BOOT
    ========================================================= */
 checkStorage();
 load();
-migrateB2u();
-migrateTieredRecalibration();
+restoreLiveSession();     // migration'lardan ONCE — onlar save() cagiriyor ve
+migrateB2u();             // o anda bellekteki live henuz null oldugu icin
+migrateTieredRecalibration();  // diskteki kaydi silerlerdi
 render();
 window.addEventListener("beforeunload", e => { if(live){ e.preventDefault(); e.returnValue=""; } });
 </script>
