@@ -2671,6 +2671,9 @@ window.importData = function(ev){
 
 /* shared tail for both file- and paste-based import */
 function applyImported(nSess){
+  /* Ice aktarilan yedek eski surumden gelmis olabilir — yeni hareketleri
+     kur, bekleyen duzeltmeleri uygula. Kaydetmeden ONCE calismali. */
+  runMigrations();
   const ok = save();
   view = "home"; render();
   if(!ok) return;
@@ -2832,15 +2835,39 @@ function restoreLiveSession(){
   }, 100);
 }
 
+/* Tum gecis islemleri — hem acilista hem JSON ice aktarmadan sonra
+   calismali, yoksa eski bir yedek yuklendiginde yeni hareketlerin
+   agirligi kurulmadan kalir (ekranda "—" gorunur). */
+/* Guvenlik agi: aktif programdaki bir hareketin agirligi hic kurulmamissa
+   (eski yedek, sonradan eklenen hareket) varsayilan test degerinden hesapla.
+   Boylece hicbir hareket ekranda "—" olarak kalmaz. */
+function seedMissingWeights(){
+  if(!S.setup) return;
+  let changed = false;
+  allEx().forEach(ex => {
+    if(ex.type === "bw") return;
+    if(S.weights[ex.id] != null) return;
+    const t = ex.test;
+    S.weights[ex.id] = Math.max(mround(epley(t[0], t[1]) * ex.pct, 2.5), 2.5);
+    changed = true;
+  });
+  if(changed) save();
+}
+
+function runMigrations(){
+  migrateB2u();
+  migrateTieredRecalibration();
+  seedMissingWeights();
+}
+
 /* =========================================================
    BOOT
    ========================================================= */
 checkStorage();
 load();
 restoreLiveSession();     // migration'lardan ONCE — onlar save() cagiriyor ve
-migrateB2u();             // o anda bellekteki live henuz null oldugu icin
-migrateTieredRecalibration();  // diskteki kaydi silerlerdi
-render();
+runMigrations();          // o anda bellekteki live henuz null oldugu icin
+render();                 // diskteki kaydi silerlerdi
 window.addEventListener("beforeunload", e => { if(live){ e.preventDefault(); e.returnValue=""; } });
 </script>
 </body>
