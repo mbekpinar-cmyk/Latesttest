@@ -454,6 +454,39 @@ body.resting #app{padding-bottom:calc(var(--nav-h) + 110px)}
 .hexrow .nm{font-size:13px;color:var(--text)}
 .hexrow .nm small{color:var(--faint);font-size:12px;font-family:var(--fn)}
 .hexrow .rp{font-size:12px;color:var(--muted);font-family:var(--fn);white-space:nowrap}
+/* ---------- ilerleme: genel bakis ---------- */
+.herostats{display:flex;gap:8px;margin-bottom:16px}
+.herostats .hs{flex:1;background:var(--card);border-radius:14px;padding:12px 14px}
+.herostats .hk{font-size:10px;color:var(--faint);font-weight:800;letter-spacing:.08em;margin-bottom:4px}
+.herostats .hv{font-family:var(--fn);font-size:22px;font-weight:800;color:var(--text)}
+.herostats .hv small{font-size:12px;font-weight:700;color:var(--faint);margin-left:2px}
+.sectionlbl{font-size:11px;color:var(--faint);font-weight:800;letter-spacing:.06em;margin:0 0 8px}
+.pcard{background:var(--card);border-radius:14px;padding:13px 14px;margin-bottom:8px;border:1px solid var(--line)}
+.pcard.warn{border-color:var(--amber)}
+.pctop{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.pname{font-size:14px;color:var(--text)}
+.ptag{font-size:10.5px;font-weight:800;padding:3px 8px;border-radius:7px}
+.ptag.warn{background:rgba(245,166,35,.15);color:var(--amber)}
+.ptag.flat{background:var(--cell);color:var(--muted)}
+.pbig{display:flex;align-items:baseline;gap:6px;margin-bottom:10px}
+.pbig{font-family:var(--fn);font-size:24px;color:var(--text);font-weight:700}
+.pbig .punit{font-family:var(--f);font-size:12.5px;color:var(--muted);font-weight:500}
+.pmuted{font-size:12px;color:var(--faint);margin-top:3px}
+.rpebars{display:flex;gap:3px;margin-bottom:11px}
+.rpebar{flex:1;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-family:var(--fn)}
+.rpebar.warn{background:rgba(245,166,35,.15);color:var(--amber)}
+.pnote{font-size:12px;color:var(--muted);line-height:1.5;padding-top:10px;border-top:1px solid var(--line)}
+.tcard{background:var(--card);border-radius:14px;padding:12px 14px;margin-bottom:8px}
+.tctop{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
+.tspeed{font-size:11px;font-weight:700}
+.trow{display:flex;align-items:center;gap:8px}
+.tnum{font-family:var(--fn);font-size:15px;color:var(--text)}
+.tnum.accent{color:var(--amber)}
+.tline{flex:1;height:1px;background:var(--line);position:relative}
+.tline::after{content:'';position:absolute;right:0;top:-3px;width:0;height:0;
+  border-left:5px solid var(--line-hi);border-top:4px solid transparent;border-bottom:4px solid transparent}
+.ttag{font-size:10px;color:var(--faint)}
 </style>
 </head>
 <body>
@@ -778,6 +811,11 @@ function exerciseSVG(exId, frames){
    PROGRAM TANIMI  — Excel ile aynı mantık
    type: main (4x5+ AMRAP) | sec (3x10) | sec4 (4x10) | acc (aralık) | bw (vücut ağırlığı)
    ========================================================= */
+/* Karin — haftada 3 kez (her antrenmanda), o yuzden gun basina hacim dusuruldu:
+   eskiden haftada 1x 3 set / 45 tekrar hedefi, simdi haftada 3x 2 set / 30 tekrar hedefi
+   (haftalik toplam ~3 sete karsi ~6 sete cikiyor ama gunluk yuk azaliyor). */
+const AB_CRUNCH = {id:"a6", n:"Ab Crunch Machine", type:"acc", sets:2, scheme:"2x10-15", total:30, inc:2.5, pct:0.50, test:[30,12]};
+
 const PROGRAM = {
   A: { name:"Antrenman A", ex:[
     {id:"a1", n:"Chest Press Machine",   type:"main", sets:4, scheme:"4x5+",    target:5,  inc:2.5, pct:0.70, test:[40,8]},
@@ -785,7 +823,7 @@ const PROGRAM = {
     {id:"a3", n:"Lat Pulldown",          type:"acc",  sets:3, scheme:"3x10-14", total:42,  inc:2.5, pct:0.55, test:[40,8]},
     {id:"a4", n:"Leg Extension",         type:"acc",  sets:3, scheme:"3x10-14", total:42,  inc:2.5, pct:0.55, test:[40,8]},
     {id:"a5", n:"Machine Lateral Raise", type:"acc",  sets:3, scheme:"3x12-15", total:45,  inc:2.5, pct:0.50, test:[20,12]},
-    {id:"a6", n:"Ab Crunch Machine",     type:"acc",  sets:3, scheme:"3x10-15", total:45,  inc:2.5, pct:0.50, test:[30,12]},
+    AB_CRUNCH,
   ]},
   B: { name:"Antrenman B", ex:[
     {id:"b1", n:"Leg Press",             type:"main", sets:4, scheme:"4x5+",    target:5,  inc:5,   pct:0.70, test:[90,10]},
@@ -793,7 +831,7 @@ const PROGRAM = {
     {id:"b3", n:"Seated Cable Row",      type:"acc",  sets:3, scheme:"3x10-14", total:42,  inc:2.5, pct:0.55, test:[40,10]},
     {id:"b4", n:"Reverse Pec Deck",      type:"acc",  sets:3, scheme:"3x12-15", total:45,  inc:2.5, pct:0.50, test:[25,12]},
     {id:"b5", n:"Seated Dumbbell Curl",  type:"acc",  sets:3, scheme:"3x8-12",  total:36,  inc:2,   pct:0.55, test:[10,8]},
-    {id:"b6", n:"Leg Raises",            type:"bw",   sets:3, scheme:"3xmax"},
+    AB_CRUNCH,
   ]},
   C: { name:"Antrenman C", ex:[
     {id:"c1", n:"Shoulder Press Machine",type:"main", sets:4, scheme:"4x5+",    target:5,  inc:2.5, pct:0.70, test:[40,8]},
@@ -801,7 +839,7 @@ const PROGRAM = {
     {id:"c3", n:"Machine Row",           type:"sec4", sets:4, scheme:"4x10",    target:10, inc:2.5, pct:0.60, test:[40,8]},
     {id:"c4", n:"Pec Deck (Chest Fly)",  type:"acc",  sets:3, scheme:"3x10-14", total:42,  inc:2.5, pct:0.55, test:[25,10]},
     {id:"c5", n:"Cable Pushdown",        type:"acc",  sets:3, scheme:"3x8-12",  total:36,  inc:2.5, pct:0.55, test:[20,8]},
-    {id:"c6", n:"Plank",                 type:"bw",   sets:3, scheme:"3xmax"},
+    AB_CRUNCH,
   ]},
 };
 const ORDER = ["A","B","C"];
@@ -815,6 +853,8 @@ function programOf(key){
    Aktif antrenman listesinde gorunmezler. */
 const ARCHIVED_EX = [
   {id:"b2", n:"Dumbbell Bench Press (arşiv)", type:"sec", sets:3, scheme:"3x10", target:10, inc:2, pct:0.60, test:[16,10]},
+  {id:"b6", n:"Leg Raises (arşiv)", type:"bw", sets:3, scheme:"3xmax"},
+  {id:"c6", n:"Plank (arşiv)", type:"bw", sets:3, scheme:"3xmax"},
 ];
 function findExAny(id){ return findEx(id) || ARCHIVED_EX.find(e => e.id === id); }
 const REST = { main:180, sec:120, sec4:120, acc:90, bw:60 };
@@ -888,7 +928,13 @@ function save(){
    ========================================================= */
 const mround = (v, m) => Math.round(v/m)*m;
 const epley  = (w, r) => mround(w*(1+r/30), 0.5);
-function allEx(){ return ORDER.flatMap(k => PROGRAM[k].ex); }
+function allEx(){
+  const seen = new Set(), out = [];
+  ORDER.forEach(k => PROGRAM[k].ex.forEach(e => {
+    if(!seen.has(e.id)){ seen.add(e.id); out.push(e); }
+  }));
+  return out;
+}
 function findEx(id){ return allEx().find(e => e.id === id); }
 function incOf(ex){ return S.incs[ex.id] != null ? S.incs[ex.id] : ex.inc; }
 
@@ -912,7 +958,8 @@ function progressDecision(ex, reps, rpeArr, cur){
   const avgRpe = rpeVals.length ? Math.round(rpeVals.reduce((a,b)=>a+b,0)/rpeVals.length*10)/10 : null;
 
   if(ex.type === "main" || ex.type === "sec" || ex.type === "sec4"){
-    const last = reps[ex.sets-1];
+    const lastIdx = Math.min(ex.sets-1, reps.length-1);
+    const last = reps[lastIdx];
     if(last == null) return {weight:cur, tier:"incomplete"};
     if(last < ex.target){
       return {weight:Math.max(mround(cur*0.9, 2.5), 2.5), tier:"deload", last, avgRpe};
@@ -1979,28 +2026,31 @@ function decisionNote(ex, e){
   if(ex.type === "bw" || e.kg == null) return "";
   const d = progressDecision(ex, e.reps, e.rpe, e.kg);
   const rpeTxt = d.avgRpe != null ? ` (Ort. RPE ${d.avgRpe})` : "";
+  /* Sonucu acikca yaz: bu performansin ardindan agirlik ne oldu.
+     Boylece notun hangi antrenmana ait oldugu tartismasiz olur. */
+  const to = d.weight != null ? `→ sonraki: ${fmtKg(d.weight)} kg` : "";
 
   switch(d.tier){
     case "deload":
-      return `Son set hedefi (${ex.target} tekrar) tutmadı, ${d.last} kaldı → ağırlık %10 azaltıldı`;
+      return `Son set hedefi (${ex.target} tekrar) tutmadı, ${d.last} kaldı ${to} (%10 azaltıldı)`;
     case "recalibrate":
-      return `Son sette hedefin ${Math.round(d.ratio)} katından fazla tekrar çıktın (${d.last}/${ex.target}) → ağırlık gerçek performansına göre yeniden hesaplandı (en fazla %25 sıçrama ile)`;
+      return `Hedefin ${Math.round(d.ratio)} katından fazla tekrar çıktın (${d.last}/${ex.target}) ${to} (performansına göre yeniden hesaplandı)`;
     case "bigjump":
-      return `Son sette hedefin ${Math.round(d.ratio*10)/10} katı tekrar çıktın (${d.last}/${ex.target}) → ağırlık normalin iki katı artırıldı`;
+      return `Hedefin ${Math.round(d.ratio*10)/10} katı tekrar çıktın (${d.last}/${ex.target}) ${to} (çift artış)`;
     case "hold_high_rpe":
-      return `Hedefi tutturdun ama zorlanma çok yüksekti${rpeTxt} → ağırlık zorlanmadan sabit tutuldu`;
+      return `Hedefi tutturdun ama zorlanma yüksekti${rpeTxt} ${to} (sabit tutuldu)`;
     case "double_low_rpe":
-      return `Hedefi rahat tutturdun${rpeTxt} → ağırlık normalin iki katı artırıldı`;
+      return `Hedefi rahat tutturdun${rpeTxt} ${to} (çift artış)`;
     case "normal":
-      return `Hedefi (${ex.target}+ tekrar) tutturdun${rpeTxt} → ağırlık bir sonraki için artırıldı`;
+      return `Hedefi (${ex.target}+ tekrar) tutturdun${rpeTxt} ${to}`;
     case "acc_missed":
-      return `Toplam tekrar hedefini (${ex.total}) tutturamadın, ${d.sum} oldu → ağırlık sabit kaldı, deload yok`;
+      return `Toplam tekrar hedefini (${ex.total}) tutturamadın, ${d.sum} oldu ${to} (sabit kaldı)`;
     case "acc_hold_high_rpe":
-      return `Toplam hedefi tutturdun ama zorlanma çok yüksekti${rpeTxt} → ağırlık sabit tutuldu`;
+      return `Toplam hedefi tutturdun ama zorlanma yüksekti${rpeTxt} ${to} (sabit tutuldu)`;
     case "acc_double_low_rpe":
-      return `Toplam hedefi rahat tutturdun${rpeTxt} → ağırlık normalin iki katı artırıldı`;
+      return `Toplam hedefi rahat tutturdun (${d.sum}/${ex.total})${rpeTxt} ${to} (çift artış)`;
     case "acc_normal":
-      return `Toplam tekrar hedefini (${ex.total}) tutturdun${rpeTxt} → ağırlık artırıldı`;
+      return `Toplam tekrar hedefini tutturdun (${d.sum}/${ex.total})${rpeTxt} ${to}`;
     default:
       return "";
   }
@@ -2022,7 +2072,9 @@ function changeLine(ex, s, idx){
 
   if(e.kg == null || p.kg == null) return `<div class="hdelta same">— sabit</div>`;
   const d = Math.round((e.kg - p.kg)*10)/10;
-  const note = decisionNote(ex, p);
+  /* Not, BU satirdaki rakamlarin sonucunu anlatir: bugun ne yaptin ve
+     bunun sonucu bir sonraki antrenmanda ne olacak. */
+  const note = decisionNote(ex, e);
   const noteHtml = note ? `<div class="hnote">${note}</div>` : "";
   if(d === 0) return `<div class="hdelta same">— sabit (${fmtKg(p.kg)} kg)</div>${noteHtml}`;
   return `<div class="hdelta ${d>0?'up':'dn'}">${d>0?'▲':'▼'} ${d>0?'+':''}${fmtKg(d)} kg — önceki ${fmtKg(p.kg)}</div>${noteHtml}`;
@@ -2145,42 +2197,169 @@ function renderProgress(){
 }
 window.setProgTab = function(t){ progressTab=t; render(); };
 
+/* =========================================================
+   YENI GENEL BAKIS — plato teshisi + hiz tahmini
+   ========================================================= */
+
+/* Bu hareketin gecmis agirlik/RPE serisini, en son antrenmanin
+   ham reps/rpe verisiyle birlikte dondurur (decisionNote icin gerekli). */
+function exerciseHistory(exId){
+  const pts = [];
+  S.sessions.forEach(s => {
+    const e = s.entries[exId];
+    if(!e || e.kg == null) return;
+    const rpeVals = (e.rpe||[]).filter(v=>v!=null);
+    const avgRpe = rpeVals.length ? rpeVals.reduce((a,b)=>a+b,0)/rpeVals.length : null;
+    pts.push({ date:s.date, kg:e.kg, avgRpe, entry:e });
+  });
+  return pts;
+}
+
+/* Bir hareketi siniflandirir: plato (takildi/dengelendi) ya da trend (hiz + 4hf tahmin). */
+function classifyExercise(ex){
+  const pts = exerciseHistory(ex.id);
+  if(pts.length < 2) return null;
+
+  const last = pts[pts.length-1];
+  const inc = incOf(ex);
+
+  /* Sondan geriye dogru ayni agirlikta kac antrenman gitmis */
+  let flatCount = 1;
+  for(let i=pts.length-2; i>=0; i--){
+    if(Math.abs(pts[i].kg - last.kg) < 0.01) flatCount++; else break;
+  }
+
+  if(flatCount >= 3){
+    const streak = pts.slice(pts.length-flatCount);
+    const rpeVals = streak.map(p=>p.avgRpe).filter(v=>v!=null);
+    const avgStreakRpe = rpeVals.length ? rpeVals.reduce((a,b)=>a+b,0)/rpeVals.length : null;
+    const stuck = avgStreakRpe !== null && avgStreakRpe >= 8.5;
+    const note = decisionNote(ex, last.entry);
+    return { id:ex.id, name:ex.n, status:'plateau', stuck, current:last.kg,
+             flatCount, streak: rpeVals, note };
+  }
+
+  /* Trend: son (en fazla 4) noktadaki degisimlere bak */
+  const win = pts.slice(-4);
+  const deltas = [];
+  for(let i=1;i<win.length;i++) deltas.push(win[i].kg - win[i-1].kg);
+  if(!deltas.length) return null;
+  const numFlat = deltas.filter(d=>Math.abs(d)<0.01).length;
+  const avgDelta = deltas.reduce((a,b)=>a+b,0)/deltas.length;
+
+  let speed = 'normal';
+  if(numFlat >= 1) speed = 'slowing';
+  else if(inc > 0 && avgDelta/inc >= 1.3) speed = 'fast';
+
+  /* 4 haftalik tahmin: antrenman basina ortalama artis * bu hareketin
+     4 haftada kac kez goruldugu (gercek tarih araliklarindan hesapla) */
+  const span = (new Date(last.date) - new Date(pts[0].date)) / 86400000;
+  const avgIntervalDays = pts.length > 1 ? span / (pts.length-1) : 7;
+  const sessionsIn28 = avgIntervalDays > 0 ? Math.round(28/avgIntervalDays) : 4;
+  const forecast = speed === 'slowing'
+    ? mround(last.kg + avgDelta * sessionsIn28 * 0.5, ex.inc || 2.5)
+    : mround(last.kg + avgDelta * sessionsIn28, ex.inc || 2.5);
+
+  return { id:ex.id, name:ex.n, status:'trend', speed, current:last.kg,
+           forecast: Math.max(forecast, last.kg) };
+}
+
 function progressGenel(){
   if(!S.sessions.length) return emptyState("Antrenman kaydettikçe burada özet oluşacak.");
-  const total = S.sessions.length;
-  const totalVol = S.sessions.reduce((t,s)=>t+sessionVolume(s),0);
-  const totalSets = S.sessions.reduce((t,s)=>t+sessionSets(s),0);
-  const bwStart = S.bwLog[0]?.kg ?? S.bodyweight;
-  const bwNow = S.bwLog[S.bwLog.length-1]?.kg ?? S.bodyweight;
-  const bwDelta = bwNow - bwStart;
 
-  // avg RPE across all sessions
-  let rpeSum=0, rpeN=0;
-  S.sessions.forEach(s => Object.values(s.entries).forEach(e => {
-    (e.rpe||[]).forEach(v => { if(v!=null){ rpeSum+=v; rpeN++; } });
-  }));
-  const avgRpe = rpeN ? (rpeSum/rpeN).toFixed(1) : "—";
+  const items = allEx()
+    .filter(ex => ex.type !== "bw")
+    .map(classifyExercise)
+    .filter(Boolean);
+
+  const plateaus = items.filter(i => i.status === 'plateau');
+  const stuckCount = plateaus.filter(i => i.stuck).length;
+  const trends = items.filter(i => i.status === 'trend');
+
+  /* Ustteki hero rakam: son 28 gunde ana/ikincil hareketlerde toplam kac kg artis */
+  const cutoff = Date.now() - 28*86400000;
+  let heroGain = 0;
+  allEx().filter(ex=>["main","sec","sec4"].includes(ex.type)).forEach(ex=>{
+    const pts = exerciseHistory(ex.id).filter(p=>new Date(p.date).getTime() >= cutoff);
+    if(pts.length >= 2) heroGain += (pts[pts.length-1].kg - pts[0].kg);
+  });
+
+  /* Siralama: once dikkat isteyen platolar, sonra dengelenen platolar, sonra hiza gore trendler */
+  plateaus.sort((a,b) => (b.stuck?1:0) - (a.stuck?1:0));
+  const speedOrder = {fast:0, normal:1, slowing:2};
+  trends.sort((a,b) => speedOrder[a.speed] - speedOrder[b.speed]);
+
+  const speedLbl = {fast:'↗ hızlı', normal:'↗ düzenli', slowing:'→ yavaşlıyor'};
+  const speedColor = {fast:'var(--green)', normal:'var(--green)', slowing:'var(--amber)'};
+
+  const plateauCards = plateaus.map(p => {
+    if(p.stuck){
+      const bars = p.streak.map(v => `<div class="rpebar warn">${Math.round(v*10)/10}</div>`).join("");
+      return `<div class="pcard warn" onclick="openExProgress('${p.id}')">
+        <div class="pctop">
+          <span class="pname">${esc(p.name)}</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span class="ptag warn">Takıldı</span>
+            ${chevIcon()}
+          </div>
+        </div>
+        <div class="pbig">${fmtKg(p.current)}<span class="punit">kg · ${p.flatCount} antrenmandır aynı</span></div>
+        <div class="rpebars">${bars}</div>
+        <div class="pnote">${p.note || 'Hedefi tutturuyorsun ama zorlanman sürekli yüksek. Sistem bu yüzden ağırlığı artırmıyor.'}</div>
+      </div>`;
+    }
+    return `<div class="pcard" onclick="openExProgress('${p.id}')">
+      <div class="pctop">
+        <span class="pname">${esc(p.name)}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="ptag flat">◆ dengelendi</span>
+          ${chevIcon()}
+        </div>
+      </div>
+      <div class="pmuted">${fmtKg(p.current)} kg · ${p.flatCount} antrenmandır aynı</div>
+    </div>`;
+  }).join("");
+
+  const trendCards = trends.map(t => `
+    <div class="tcard" onclick="openExProgress('${t.id}')">
+      <div class="tctop">
+        <span class="pname">${esc(t.name)}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="tspeed" style="color:${speedColor[t.speed]}">${speedLbl[t.speed]}</span>
+          ${chevIcon()}
+        </div>
+      </div>
+      <div class="trow">
+        <span class="tnum">${fmtKg(t.current)}</span>
+        <div class="tline"></div>
+        <span class="tnum accent">~${fmtKg(t.forecast)}</span>
+        <span class="ttag">4hf</span>
+      </div>
+    </div>`).join("");
 
   return `
-    <div class="statgrid">
-      <div><div class="k">Antrenman</div><div class="v">${total}</div></div>
-      <div><div class="k">Toplam Hacim</div><div class="v">${Math.round(totalVol/1000)}<small>t</small></div></div>
-      <div><div class="k">Toplam Set</div><div class="v">${totalSets}</div></div>
+    <div class="herostats">
+      <div class="hs"><div class="hk">4 hafta ilerleme</div>
+        <div class="hv">${heroGain>=0?'+':''}${fmtKg(heroGain)}<small>kg</small></div></div>
+      <div class="hs"><div class="hk">Dikkat isteyen</div>
+        <div class="hv" style="color:${stuckCount>0?'var(--amber)':'var(--text)'}">${stuckCount}</div></div>
     </div>
-    <div class="statgrid">
-      <div><div class="k">Kilo Değişimi</div><div class="v" style="color:${bwDelta<0?'var(--green)':'var(--red)'}">${bwDelta>=0?'+':''}${fmtKg(bwDelta)}<small>kg</small></div></div>
-      <div><div class="k">Ort. RPE</div><div class="v">${avgRpe}</div></div>
-      <div><div class="k">Son Antr.</div><div class="v" style="font-size:13px">${daysAgo(S.sessions[S.sessions.length-1].date)}</div></div>
-    </div>
-    <div class="rangeseg" style="margin-top:4px">
-      ${[['3ay','3 Ay'],['6ay','6 Ay'],['1yil','1 Yıl'],['tumu','Tümü']].map(([id,l])=>
-        `<button class="${progressRange===id?'on':''}" onclick="setRange('${id}')">${l}</button>`).join("")}
-    </div>
-    ${allLiftsChartCard()}
-    ${bodyweightChartCard()}
-    ${volumeChartCard()}
+    ${plateaus.length ? `<div class="sectionlbl">Hareketler</div>${plateauCards}` : ''}
+    ${trendCards}
+    ${!items.length ? emptyState("Birkaç antrenman sonra burada analiz görünecek.") : ''}
   `;
 }
+
+function chevIcon(){
+  return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
+}
+
+window.openExProgress = function(exId){
+  progressTab = 'egzersizler';
+  progressExId = exId;
+  render();
+};
+
 
 function allLiftsChartCard(){
   const cutoffDays = {"3ay":90,"6ay":180,"1yil":365,"tumu":99999}[progressRange] || 99999;
