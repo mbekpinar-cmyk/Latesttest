@@ -814,31 +814,31 @@ function exerciseSVG(exId, frames){
 /* Karin — haftada 3 kez (her antrenmanda), o yuzden gun basina hacim dusuruldu:
    eskiden haftada 1x 3 set / 45 tekrar hedefi, simdi haftada 3x 2 set / 30 tekrar hedefi
    (haftalik toplam ~3 sete karsi ~6 sete cikiyor ama gunluk yuk azaliyor). */
-const AB_CRUNCH = {id:"a6", n:"Ab Crunch Machine", type:"acc", sets:2, scheme:"2x10-15", total:30, inc:2.5, pct:0.50, test:[30,12]};
+const AB_CRUNCH = {id:"a6", n:"Ab Crunch Machine", type:"acc", sets:2, scheme:"2x10-15", total:30, min:10, max:15, inc:2.5, pct:0.50, test:[30,12]};
 
 const PROGRAM = {
   A: { name:"Antrenman A", ex:[
     {id:"a1", n:"Chest Press Machine",   type:"main", sets:4, scheme:"4x5+",    target:5,  inc:2.5, pct:0.70, test:[40,8]},
     {id:"a2", n:"Seated Leg Curl",       type:"sec",  sets:3, scheme:"3x10",    target:10, inc:2.5, pct:0.60, test:[35,10]},
-    {id:"a3", n:"Lat Pulldown",          type:"acc",  sets:3, scheme:"3x10-14", total:42,  inc:2.5, pct:0.55, test:[40,8]},
-    {id:"a4", n:"Leg Extension",         type:"acc",  sets:3, scheme:"3x10-14", total:42,  inc:2.5, pct:0.55, test:[40,8]},
-    {id:"a5", n:"Machine Lateral Raise", type:"acc",  sets:3, scheme:"3x12-15", total:45,  inc:2.5, pct:0.50, test:[20,12]},
+    {id:"a3", n:"Lat Pulldown",          type:"acc",  sets:3, scheme:"3x10-14", total:42, min:10, max:14,  inc:2.5, pct:0.55, test:[40,8]},
+    {id:"a4", n:"Leg Extension",         type:"acc",  sets:3, scheme:"3x10-14", total:42, min:10, max:14,  inc:2.5, pct:0.55, test:[40,8]},
+    {id:"a5", n:"Machine Lateral Raise", type:"acc",  sets:3, scheme:"3x12-15", total:45, min:12, max:15,  inc:2.5, pct:0.50, test:[20,12]},
     AB_CRUNCH,
   ]},
   B: { name:"Antrenman B", ex:[
     {id:"b1", n:"Leg Press",             type:"main", sets:4, scheme:"4x5+",    target:5,  inc:5,   pct:0.70, test:[90,10]},
     {id:"b2u", n:"Üst Göğüs Makinesi (Eğik)", type:"sec",  sets:3, scheme:"3x10",    target:10, inc:2.5, pct:0.60, test:[25,10]},
-    {id:"b3", n:"Seated Cable Row",      type:"acc",  sets:3, scheme:"3x10-14", total:42,  inc:2.5, pct:0.55, test:[40,10]},
-    {id:"b4", n:"Reverse Pec Deck",      type:"acc",  sets:3, scheme:"3x12-15", total:45,  inc:2.5, pct:0.50, test:[25,12]},
-    {id:"b5", n:"Seated Dumbbell Curl",  type:"acc",  sets:3, scheme:"3x8-12",  total:36,  inc:2,   pct:0.55, test:[10,8]},
+    {id:"b3", n:"Seated Cable Row",      type:"acc",  sets:3, scheme:"3x10-14", total:42, min:10, max:14,  inc:2.5, pct:0.55, test:[40,10]},
+    {id:"b4", n:"Reverse Pec Deck",      type:"acc",  sets:3, scheme:"3x12-15", total:45, min:12, max:15,  inc:2.5, pct:0.50, test:[25,12]},
+    {id:"b5", n:"Seated Dumbbell Curl",  type:"acc",  sets:3, scheme:"3x8-12",  total:36, min:8, max:12,  inc:2,   pct:0.55, test:[10,8]},
     AB_CRUNCH,
   ]},
   C: { name:"Antrenman C", ex:[
     {id:"c1", n:"Shoulder Press Machine",type:"main", sets:4, scheme:"4x5+",    target:5,  inc:2.5, pct:0.70, test:[40,8]},
     {id:"c2", n:"Hack Squat / Leg Press",type:"sec",  sets:3, scheme:"3x10",    target:10, inc:5,   pct:0.60, test:[70,10]},
     {id:"c3", n:"Machine Row",           type:"sec4", sets:4, scheme:"4x10",    target:10, inc:2.5, pct:0.60, test:[40,8]},
-    {id:"c4", n:"Pec Deck (Chest Fly)",  type:"acc",  sets:3, scheme:"3x10-14", total:42,  inc:2.5, pct:0.55, test:[25,10]},
-    {id:"c5", n:"Cable Pushdown",        type:"acc",  sets:3, scheme:"3x8-12",  total:36,  inc:2.5, pct:0.55, test:[20,8]},
+    {id:"c4", n:"Pec Deck (Chest Fly)",  type:"acc",  sets:3, scheme:"3x10-14", total:42, min:10, max:14,  inc:2.5, pct:0.55, test:[25,10]},
+    {id:"c5", n:"Cable Pushdown",        type:"acc",  sets:3, scheme:"3x8-12",  total:36, min:8, max:12,  inc:2.5, pct:0.55, test:[20,8]},
     AB_CRUNCH,
   ]},
 };
@@ -985,13 +985,29 @@ function progressDecision(ex, reps, rpeArr, cur){
   }
 
   if(ex.type === "acc"){
-    const sum = reps.reduce((a,b)=> a + (b||0), 0);
-    if(sum >= ex.total){
-      if(avgRpe !== null && avgRpe >= 9.5) return {weight:cur, tier:"acc_hold_high_rpe", sum, avgRpe};
-      if(avgRpe !== null && avgRpe <= 7)   return {weight:cur + inc*2, tier:"acc_double_low_rpe", sum, avgRpe};
-      return {weight:cur + inc, tier:"acc_normal", sum, avgRpe};
+    /* Aralığin ALT sinirini her sette tutturmak basaridir (asagida). Artis
+       miktari ise iki sinyalin karisimindan geliyor: en zayif setin araliktaki
+       konumu (alt mi ust mu) + ortalama RPE. Boylece "12-15 tekrar" gibi
+       araliklarda 12'ye yakin-zor ile 15'e yakin-kolay ayni artisi almiyor. */
+    const minReps = ex.min != null ? ex.min : Math.ceil((ex.total||0) / ex.sets);
+    const maxReps = ex.max != null ? ex.max : minReps;
+    const filled = reps.filter(r => r != null);
+    const sum = filled.reduce((a,b)=> a + b, 0);
+    const hit = filled.length >= ex.sets && filled.every(r => r >= minReps);
+    if(!hit){
+      const worst = filled.length ? Math.min(...filled) : 0;
+      return {weight:cur, tier:"acc_missed", sum, minReps, worst, avgRpe};
     }
-    return {weight:cur, tier:"acc_missed", sum, avgRpe};
+    const worst = Math.min(...filled);
+    const repPos = maxReps > minReps ? Math.max(0, Math.min(1, (worst-minReps)/(maxReps-minReps))) : 1;
+    const rpePos = avgRpe != null ? Math.max(0, Math.min(1, (10-avgRpe)/4)) : repPos;
+    const score = 0.4*repPos + 0.6*rpePos;
+    let weight, tier;
+    if(score >= 0.75){ weight = cur + inc*2;   tier = "acc_big"; }
+    else if(score >= 0.45){ weight = cur + inc; tier = "acc_normal"; }
+    else if(score >= 0.15){ weight = cur + inc/2; tier = "acc_small"; }
+    else { weight = cur; tier = "acc_hold"; }
+    return {weight, tier, sum, minReps, maxReps, worst, score, avgRpe};
   }
 
   return {weight:cur, tier:"other"};
@@ -1262,7 +1278,7 @@ const $app = document.getElementById("app");
 const $nav = document.getElementById("nav");
 const $rest = document.getElementById("rest");
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const fmtKg = v => (v == null ? "—" : (Math.round(v*10)/10).toString().replace(".0",""));
+const fmtKg = v => (v == null ? "—" : (Math.round(v*100)/100).toString());
 
 function render(){
   if(!S.setup){ renderSetup(); return; }
@@ -2044,13 +2060,15 @@ function decisionNote(ex, e){
     case "normal":
       return `Hedefi (${ex.target}+ tekrar) tutturdun${rpeTxt} ${to}`;
     case "acc_missed":
-      return `Toplam tekrar hedefini (${ex.total}) tutturamadın, ${d.sum} oldu ${to} (sabit kaldı)`;
-    case "acc_hold_high_rpe":
-      return `Toplam hedefi tutturdun ama zorlanma yüksekti${rpeTxt} ${to} (sabit tutuldu)`;
-    case "acc_double_low_rpe":
-      return `Toplam hedefi rahat tutturdun (${d.sum}/${ex.total})${rpeTxt} ${to} (çift artış)`;
+      return `Bir sette en az ${d.minReps} tekrar gerekiyordu, en düşük setin ${d.worst} oldu ${to} (sabit kaldı, deload yok)`;
+    case "acc_hold":
+      return `Sınırda tutturdun ama zorlanma yüksekti (${d.worst}/${d.minReps}-${d.maxReps}${rpeTxt}) ${to} (sabit tutuldu)`;
+    case "acc_small":
+      return `Hedefi tutturdun, aralığın altına yakın kaldın (${d.worst}/${d.minReps}-${d.maxReps}${rpeTxt}) ${to} (küçük artış)`;
     case "acc_normal":
-      return `Toplam tekrar hedefini tutturdun (${d.sum}/${ex.total})${rpeTxt} ${to}`;
+      return `Her sette hedefi tutturdun (${d.worst}/${d.minReps}-${d.maxReps}${rpeTxt}) ${to}`;
+    case "acc_big":
+      return `Aralığın tepesine yakın ve rahat çıktın (${d.worst}/${d.minReps}-${d.maxReps}${rpeTxt}) ${to} (büyük artış)`;
     default:
       return "";
   }
@@ -2232,9 +2250,12 @@ function classifyExercise(ex){
   if(flatCount >= 3){
     const streak = pts.slice(pts.length-flatCount);
     const rpeVals = streak.map(p=>p.avgRpe).filter(v=>v!=null);
-    const avgStreakRpe = rpeVals.length ? rpeVals.reduce((a,b)=>a+b,0)/rpeVals.length : null;
-    const stuck = avgStreakRpe !== null && avgStreakRpe >= 8.5;
     const note = decisionNote(ex, last.entry);
+    const lastDecision = progressDecision(ex, last.entry.reps, last.entry.rpe, last.kg);
+    /* "Takildi" etiketi, ham gecmis sayisina degil, GUNCEL kuralin bu
+       performansi degerlendirince agirligi degistirip degistirmedigine
+       bakar — cozulmus bir durumu yanlislikla alarm olarak gostermesin. */
+    const stuck = lastDecision.weight === last.kg;
     return { id:ex.id, name:ex.n, status:'plateau', stuck, current:last.kg,
              flatCount, streak: rpeVals, note };
   }
@@ -2557,8 +2578,9 @@ function progressEgzersizler(){
     if(ex.type==="main"||ex.type==="sec"||ex.type==="sec4"){
       if(e.reps[ex.sets-1] >= ex.target) hits++;
     } else if(ex.type==="acc"){
-      const sum = e.reps.reduce((a,b)=>a+(b||0),0);
-      if(sum >= ex.total) hits++;
+      const minReps = ex.min != null ? ex.min : Math.ceil((ex.total||0) / ex.sets);
+      const filled = (e.reps||[]).filter(r=>r!=null);
+      if(filled.length >= ex.sets && filled.every(r=>r >= minReps)) hits++;
     }
   });
   const rate = tries ? Math.round(hits/tries*100) : 0;
