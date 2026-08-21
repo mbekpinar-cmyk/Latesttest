@@ -448,8 +448,17 @@ body.resting #app{padding-bottom:calc(var(--nav-h) + 110px)}
 .wuplates{font-size:11px;color:var(--faint);margin:-6px 0 14px;line-height:1.7;font-family:var(--fn)}
 .hdelta{display:flex;align-items:center;gap:5px;font-size:11px;margin:2px 0 0}
 .hdelta.up{color:var(--green)} .hdelta.dn{color:var(--red)} .hdelta.same{color:var(--faint)}
-.hnote{font-size:10.5px;color:var(--faint);line-height:1.4;margin-top:2px}
-.hexrow{padding:7px 0}
+.hnote{font-size:10.5px;color:var(--faint);line-height:1.4;margin-top:3px}
+.hchain{display:inline-grid;grid-template-columns:repeat(5,auto);gap:1px 7px;
+  align-items:baseline;margin-top:7px}
+.hchain .v{font-family:var(--fn);font-size:13.5px;font-weight:700}
+.hchain .ar{font-size:11px;text-align:center}
+.hchain .lb{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+.hchain .past{color:var(--faint)} .hchain .now{color:var(--text)}
+.hchain .up{color:var(--green)} .hchain .dn{color:var(--red)} .hchain .fl{color:var(--muted)}
+.hchain .ar.fl{color:var(--faint)}
+.hrest{font-size:10.5px;color:var(--faint);font-family:var(--fn);margin-top:4px}
+.hexrow{padding:9px 0}
 .hexrow .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .hexrow .nm{font-size:13px;color:var(--text)}
 .hexrow .nm small{color:var(--faint);font-size:12px;font-family:var(--fn)}
@@ -891,6 +900,7 @@ const blank = () => ({
   loadTypes: {},                     // exId -> 'side' | 'total' | 'off'
   plateSet: [20,15,10,5,2.5,1.25],   // salondaki plakalar (kg)
   migratedTieredProgression: false,
+  restBell: false,                   // mola bitince zil (podcast'i bolebilir — varsayilan kapali)
   live: null,                        // yarim kalmis antrenman (uygulama kapanirsa kaybolmasin)
 });
 let S = blank();
@@ -1772,6 +1782,18 @@ window.enterRep = function(v){
   const ex = findEx(detailExId);
   const wasEmpty = en.reps[padTarget.setIdx] == null;
   en.reps[padTarget.setIdx] = v;
+  if(wasEmpty){
+    /* Setler arasi GERCEK sureyi pasif olarak not al. rest[i] = i. setten
+       onceki bekleme. Duzeltmelerde olcum yapilmaz, sayac da baslamaz. */
+    const now = Date.now();
+    if(!Array.isArray(en.rest)) en.rest = [];
+    if(en.lastAt && padTarget.setIdx > 0){
+      const gap = Math.round((now - en.lastAt)/1000);
+      /* 20 dk ustu = telefonu birakmis, olcum anlamsiz */
+      if(gap > 0 && gap < 1200) en.rest[padTarget.setIdx] = gap;
+    }
+    en.lastAt = now;
+  }
   save();
   if(wasEmpty){
     /* yeni set girisi — mola baslat ve RPE'ye gec */
@@ -1837,6 +1859,7 @@ window.finishSession = function(){
   wo.ex.forEach(ex => {
     const en = live.entries[ex.id];
     rec.entries[ex.id] = { kg:en.kg, reps:en.reps.slice(), rpe:en.rpe.slice() };
+    if(Array.isArray(en.rest) && en.rest.some(v=>v!=null)) rec.entries[ex.id].rest = en.rest.slice();
     if(ex.type === "bw") return;
     if(en.reps.every(r=>r==null)) return;
     const next = progress(ex, en.reps, en.rpe);
@@ -2074,28 +2097,75 @@ function decisionNote(ex, e){
   }
 }
 
+/* Iki deger arasindaki yonu ok + renk sinifi olarak verir.
+   Renk tek basina tasiyici degil: ok yonu de bilgiyi taşır. */
+function dirOf(from, to){
+  if(from == null || to == null) return { ar:"→", cls:"fl" };
+  const d = Math.round((to - from)*100)/100;
+  if(d > 0)  return { ar:"↗", cls:"up" };
+  if(d < 0)  return { ar:"↘", cls:"dn" };
+  return { ar:"→", cls:"fl" };
+}
+
+/* onceki ▸ bugun ▸ sonraki zinciri. Renkli olan sonraki adim —
+   asil karar veremeyecegin degil, bir dahaki sefere kullanacagin kilo. */
+function chainHtml(past, now, next, unit, fmt){
+  const f = fmt || (v=>String(v));
+  const u = unit ? ` <span style="font-size:10px;color:var(--faint)">${unit}</span>` : "";
+  const d1 = dirOf(past, now);
+  const d2 = dirOf(now, next);
+  const hasPast = past != null;
+  const hasNext = next != null;
+  const cells = [];
+  const labels = [];
+  if(hasPast){
+    cells.push(`<span class="v past">${f(past)}</span>`);
+    cells.push(`<span class="ar ${d1.cls}">${d1.ar}</span>`);
+    labels.push(`<span class="lb">önceki</span>`, `<span></span>`);
+  }
+  cells.push(`<span class="v now">${f(now)}${u}</span>`);
+  labels.push(`<span class="lb">bugün</span>`);
+  if(hasNext){
+    cells.push(`<span class="ar ${d2.cls}">${d2.ar}</span>`);
+    cells.push(`<span class="v ${d2.cls}">${f(next)}</span>`);
+    labels.push(`<span></span>`, `<span class="lb ${d2.cls==='fl'?'':d2.cls}">sonraki</span>`);
+  }
+  const cols = cells.length;
+  return `<div class="hchain" style="grid-template-columns:repeat(${cols},auto)">
+    ${cells.join("")}${labels.join("")}
+  </div>`;
+}
+
+/* Setler arasi gercek dinlenme — pasif kaydedilir, ortalamasi gosterilir. */
+function restLine(ex, e){
+  const vals = (e.rest||[]).filter(v=>typeof v === "number" && v > 0);
+  if(!vals.length) return "";
+  const avg = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
+  const hedef = REST[ex.type] || 90;
+  const uzun = avg > hedef*1.5;
+  return `<div class="hrest">dinl. ort. ${mmss(avg)}${uzun?` <span style="color:var(--amber)">· hedef ${mmss(hedef)}</span>`:''}</div>`;
+}
+
 function changeLine(ex, s, idx){
   const e = s.entries[ex.id]; if(!e) return "";
   const p = prevEntry(ex.id, idx);
-  if(!p) return `<div class="hdelta same">◆ ilk kayıt</div>`;
 
   if(ex.type === "bw"){
     const cur = Math.max(0, ...(e.reps||[]).map(r=>r||0));
-    const old = Math.max(0, ...(p.reps||[]).map(r=>r||0));
-    if(!cur || !old) return `<div class="hdelta same">— sabit</div>`;
-    const d = cur - old;
-    if(d === 0) return `<div class="hdelta same">— sabit (${old})</div>`;
-    return `<div class="hdelta ${d>0?'up':'dn'}">${d>0?'▲':'▼'} ${d>0?'+':''}${d} tekrar — önceki ${old}</div>`;
+    const old = p ? Math.max(0, ...(p.reps||[]).map(r=>r||0)) : 0;
+    if(!cur) return "";
+    return chainHtml(old||null, cur, null, "tekrar") + restLine(ex, e);
   }
 
-  if(e.kg == null || p.kg == null) return `<div class="hdelta same">— sabit</div>`;
-  const d = Math.round((e.kg - p.kg)*10)/10;
-  /* Not, BU satirdaki rakamlarin sonucunu anlatir: bugun ne yaptin ve
-     bunun sonucu bir sonraki antrenmanda ne olacak. */
+  if(e.kg == null) return "";
+  const d = progressDecision(ex, e.reps, e.rpe, e.kg);
+  const next = d && d.weight != null ? d.weight : null;
+  const past = p && p.kg != null ? p.kg : null;
   const note = decisionNote(ex, e);
-  const noteHtml = note ? `<div class="hnote">${note}</div>` : "";
-  if(d === 0) return `<div class="hdelta same">— sabit (${fmtKg(p.kg)} kg)</div>${noteHtml}`;
-  return `<div class="hdelta ${d>0?'up':'dn'}">${d>0?'▲':'▼'} ${d>0?'+':''}${fmtKg(d)} kg — önceki ${fmtKg(p.kg)}</div>${noteHtml}`;
+  /* Not artik "sonraki: X kg" tekrar etmiyor — zincir zaten soyluyor. */
+  const noteClean = note ? note.replace(/\s*→ sonraki: [^(]*/, " ").replace(/\s{2,}/g," ").trim() : "";
+  const noteHtml = noteClean ? `<div class="hnote">${noteClean}</div>` : "";
+  return chainHtml(past, e.kg, next, "kg", fmtKg) + restLine(ex, e) + noteHtml;
 }
 
 function sessionAvgRpe(s){
@@ -2798,7 +2868,11 @@ function renderSettings(){
         <div><input type="number" inputmode="decimal" step="0.1" value="${S.bodyweight}" onchange="setBw(this.value)"> <span style="color:var(--muted)">kg</span></div></div>
       <div class="row"><div class="lbl">Sıradaki antrenman</div>
         <div><button class="btn sm ghost" style="width:auto;padding:9px 14px" onclick="cycleNext()">${nextName} ⟳</button></div></div>
+      <div class="row"><div class="lbl">Mola zili</div>
+        <div><button class="btn sm ghost" style="width:auto;padding:9px 14px;${S.restBell?'color:var(--amber);border-color:var(--amber)':''}"
+          onclick="toggleBell()">${S.restBell?'Açık':'Kapalı'}</button></div></div>
     </div>
+    <p class="note">Mola zili: süre bitince ses çalar. Açıkken mola boyunca çok kısık bir ses çalar — bu olmadan iPhone sayfayı dondurur ve zil hiç çalmaz. Podcast veya müziğini duraklatabilir, telefon sessiz moddayken de duyulmaz. Sayaç, zil kapalıyken de doğru çalışır.</p>
     <p class="note">Ağırlık: bir sonraki antrenmanda kullanacağın kilo. Artış: hedefi tutturduğunda eklenecek kilo — salonundaki makinenin kademesine göre ayarla.</p>
     ${blocks}
     <div class="divider"></div>
@@ -2826,6 +2900,14 @@ function renderSettings(){
     <p class="note">Veriler sadece bu telefonda saklanır, hiçbir yere gönderilmez. Safari geçmişini temizlerken "Web Sitesi Verileri"ni silersen kayıtlar da gider — arada bir dışa aktarıp yedek alman iyi olur.</p>
   `;
 }
+window.toggleBell = function(){
+  S.restBell = !S.restBell;
+  save();
+  /* Acildiysa dokunma anindayiz — sesi simdi ac ki daha sonra izin sorunu olmasin. */
+  if(S.restBell){ keepAliveOn(); setTimeout(()=>{ if(!restTimer) keepAliveOff(); }, 400); }
+  else keepAliveOff();
+  render();
+};
 window.setW = function(id,v){ const n=parseFloat(v); if(n>0){S.weights[id]=n; save();} };
 window.setInc = function(id,v){ const n=parseFloat(v); if(n>0){S.incs[id]=n; save(); render();} };
 window.setBw = function(v){ const n=parseFloat(v); if(n>0){S.bodyweight=n; save();} };
@@ -2927,40 +3009,90 @@ window.resetAll = function(){
 /* =========================================================
    REST TIMER
    ========================================================= */
-let restTimer = null, restLeft = 0;
+/* Sayac artik tik saymiyor: bitis ANI saklaniyor, kalan sure her
+   cizimde gercek saatten hesaplaniyor. Baska uygulamaya gecince
+   tarayici setInterval'i kissa da kissin, geri donunce rakam dogru. */
+let restTimer = null, restEnd = 0;
+const mmss = s => `${Math.floor(s/60)}:${String(Math.max(0,s)%60).padStart(2,'0')}`;
+function restLeftSec(){ return restEnd ? Math.max(0, Math.ceil((restEnd - Date.now())/1000)) : 0; }
+
 function startRest(sec){
   stopRest();
-  restLeft = sec;
+  restEnd = Date.now() + sec*1000;
+  if(S.restBell) keepAliveOn();
   restTimer = setInterval(()=>{
-    restLeft--;
-    if(restLeft<=0){ stopRest(); buzz(); }
+    if(restLeftSec() <= 0){ const t=restTimer; restTimer=null; clearInterval(t); restEnd=0; renderRest(); keepAliveOff(); buzz(); return; }
     renderRest();
-  },1000);
+  }, 250);
   renderRest();
 }
-function stopRest(){ if(restTimer){clearInterval(restTimer); restTimer=null;} restLeft=0; renderRest(); }
+function stopRest(){
+  if(restTimer){ clearInterval(restTimer); restTimer=null; }
+  restEnd = 0; keepAliveOff(); renderRest();
+}
 window.stopRest = stopRest;
-window.addRest = function(s){ restLeft = Math.max(0, restLeft+s); renderRest(); };
+window.addRest = function(s){ if(restEnd){ restEnd += s*1000; renderRest(); } };
 function renderRest(){
-  document.body.classList.toggle("resting", !!(restTimer && restLeft>0));
-  if(!restTimer || restLeft<=0){ $rest.innerHTML=""; return; }
-  const m = Math.floor(restLeft/60), s = restLeft%60;
+  const left = restLeftSec();
+  document.body.classList.toggle("resting", !!(restTimer && left>0));
+  if(!restTimer || left<=0){ $rest.innerHTML=""; return; }
   $rest.innerHTML = `<div class="restpill">
     <div class="dot"></div>
-    <div class="t">${m}:${String(s).padStart(2,'0')}</div>
+    <div class="t">${mmss(left)}</div>
     <button onclick="addRest(30)">+30sn</button>
     <button onclick="stopRest()">×</button>
   </div>`;
 }
-function buzz(){
-  if(navigator.vibrate) navigator.vibrate([200,100,200]);
+/* Uygulamaya geri donuldugu an dogru rakami goster (250ms bekleme). */
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) renderRest(); });
+
+/* ---------- zil ----------
+   iPhone'da sayfa arka planda donar; sadece ses calarken uyanik kalir.
+   Bu yuzden zil ACIKSA mola boyunca cok kisik bir dongu calinir.
+   Kapaliyken hicbir ses acilmaz, muzigin/podcast'in bolunmez. */
+let kaEl = null, kaUrl = null, actx = null;
+function silentUrl(){
+  if(kaUrl) return kaUrl;
+  const sr = 8000, n = sr/2, b = new Uint8Array(44+n);
+  const dv = new DataView(b.buffer);
+  const put = (o,s)=>{ for(let i=0;i<s.length;i++) b[o+i]=s.charCodeAt(i); };
+  put(0,"RIFF"); dv.setUint32(4, 36+n, true); put(8,"WAVEfmt ");
+  dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+  dv.setUint32(24,sr,true); dv.setUint32(28,sr,true);
+  dv.setUint16(32,1,true); dv.setUint16(34,8,true);
+  put(36,"data"); dv.setUint32(40,n,true);
+  for(let i=0;i<n;i++) b[44+i] = 128;
+  kaUrl = URL.createObjectURL(new Blob([b], {type:"audio/wav"}));
+  return kaUrl;
+}
+function keepAliveOn(){
   try{
-    const C=window.AudioContext||window.webkitAudioContext; if(!C) return;
-    const ctx=new C(); const o=ctx.createOscillator(); const g=ctx.createGain();
-    o.connect(g); g.connect(ctx.destination); o.frequency.value=880; o.type="sine";
-    g.gain.setValueAtTime(0.25, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.6);
-    o.start(); o.stop(ctx.currentTime+0.6);
+    if(!kaEl){ kaEl = new Audio(silentUrl()); kaEl.loop = true; kaEl.volume = 0.02; }
+    kaEl.play().catch(()=>{});
+    /* Ses motorunu dokunma anında ac — zil vakti gelince hazir olsun. */
+    const C = window.AudioContext || window.webkitAudioContext;
+    if(C && !actx) actx = new C();
+    if(actx && actx.state === "suspended") actx.resume().catch(()=>{});
+  }catch(e){}
+}
+function keepAliveOff(){ try{ if(kaEl){ kaEl.pause(); kaEl.currentTime = 0; } }catch(e){} }
+
+function buzz(){
+  if(!S.restBell) return;
+  try{
+    const C = window.AudioContext || window.webkitAudioContext; if(!C) return;
+    if(!actx) actx = new C();
+    if(actx.state === "suspended") actx.resume().catch(()=>{});
+    const beep = (at, hz)=>{
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.connect(g); g.connect(actx.destination); o.frequency.value = hz; o.type = "sine";
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(0.3, at+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, at+0.45);
+      o.start(at); o.stop(at+0.5);
+    };
+    const t = actx.currentTime;
+    beep(t, 880); beep(t+0.35, 1170);
   }catch(e){}
 }
 
