@@ -897,7 +897,8 @@ const blank = () => ({
   readiness: [],   // {date, sleep, soreness, energy, stress}  (1-5 each)
   name: "",
   setup: false,
-  loadTypes: {},                     // exId -> 'side' | 'total' | 'off'
+  loadTypes: {},                     // exId -> 'total' | 'single' | 'off'
+  migratedSideToTotal: false,
   plateSet: [20,15,10,5,2.5,1.25],   // salondaki plakalar (kg)
   migratedTieredProgression: false,
   restBell: false,                   // mola bitince zil (podcast'i bolebilir — varsayilan kapali)
@@ -1076,9 +1077,10 @@ function platesFor(perSide){
   return { plates: out, left: rem, exact: Math.round(out.reduce((a,b)=>a+b,0)*100)/100 };
 }
 
-/* Girilen kg -> bir tarafa düşen kg */
+/* Girilen kg -> bir tarafa düşen kg.
+   Kayitli deger DAIMA toplamdir; plakali makinelerde ikiye bolunur. */
 function perSideKg(exId, kg){
-  return loadTypeOf(exId) === "total" ? kg/2 : kg;
+  return loadTypeOf(exId) === "single" ? kg : kg/2;
 }
 
 function plateCounts(list){
@@ -1093,10 +1095,38 @@ function plateListText(perSide){
     .map(p => c[p]>1 ? c[p]+"×"+fmtP(p) : fmtP(p)).join("+");
 }
 
-/* İki ağırlık arasında hangi plakalar eklenir / çıkarılır */
+/* İki ağırlık arasında hangi plakalar eklenir / çıkarılır.
+   Onemli: hedefe MEVCUT plakalari koruyarak ulasilabiliyorsa o yol
+   secilir. Aksi halde "12.5 -> 15" gecisinde 10 ve 2.5'i soktur, tek
+   15'lik takar (3 hareket) — halbuki bir 2.5 eklemek yeter (1 hareket).
+   Barda daha az plaka degil, elde daha az is hedefleniyor. */
 function plateDiff(fromPerSide, toPerSide){
+  const cur = platesFor(fromPerSide).plates;
+  const need = Math.round((toPerSide - fromPerSide)*100)/100;
+
+  /* Kilo artiyorsa: mevcutlarin ustune eklemeyi dene */
+  if(need > 0){
+    const r = platesFor(need);
+    if(r.left <= 0.01){
+      const c = plateCounts(r.plates);
+      const add = Object.keys(c).map(Number).sort((x,y)=>y-x).map(p=>c[p]+"× "+fmtP(p));
+      return { add, rem: [] };
+    }
+  }
+  /* Kilo dusuyorsa: sadece cikarmayla ulasilabiliyor mu? */
+  if(need < 0){
+    const want = plateCounts(platesFor(-need).plates);
+    const have = plateCounts(cur);
+    const onlyRemove = Object.keys(want).every(p => (have[p]||0) >= want[p]);
+    if(onlyRemove){
+      const rem = Object.keys(want).map(Number).sort((x,y)=>y-x).map(p=>want[p]+"× "+fmtP(p));
+      return { add: [], rem };
+    }
+  }
+
+  /* Ulasilamadi — bastan diz (eski davranis) */
   const c = plateCounts(platesFor(toPerSide).plates);
-  platesFor(fromPerSide).plates.forEach(p=>c[p]=(c[p]||0)-1);
+  cur.forEach(p=>c[p]=(c[p]||0)-1);
   const add=[], rem=[];
   Object.keys(c).map(Number).sort((x,y)=>y-x).forEach(p=>{
     if(c[p]>0) add.push(c[p]+"× "+fmtP(p));
@@ -1147,8 +1177,7 @@ function plateCard(ex, kg){
       <div class="ph" style="margin:0">
         <span class="lb">PLAKA HESABI KAPALI</span>
         <div class="pmodes">
-          <button onclick="event.stopPropagation();setLoadType('${ex.id}','total')">toplam</button>
-          <button onclick="event.stopPropagation();setLoadType('${ex.id}','side')">her kola</button>
+          <button onclick="event.stopPropagation();setLoadType('${ex.id}','total')">aç</button>
         </div>
       </div>
     </div>`;
@@ -1193,9 +1222,9 @@ function plateCard(ex, kg){
     <div class="chips">${chips}</div>
     ${approx}${delta}
     <div class="pfoot">
-      <label><input type="checkbox" ${t==='side'?'checked':''}
-        onclick="event.stopPropagation();setLoadType('${ex.id}',this.checked?'side':'total')">
-        Bu makine her kola ayrı yükleniyor</label>
+      <label><input type="checkbox" ${t==='single'?'checked':''}
+        onclick="event.stopPropagation();setLoadType('${ex.id}',this.checked?'single':'total')">
+        Tek yükleme noktası var (plakalar ikiye bölünmesin)</label>
     </div>
   </div>`;
 }
@@ -3136,10 +3165,34 @@ function migrateB2u(){
      perSideKg() ile ayni birimden kiyasla. */
   const chestPerSide = S.weights.a1 != null ? perSideKg("a1", S.weights.a1) : null;
   const est = chestPerSide != null ? Math.max(mround(chestPerSide*0.65, 2.5), 2.5) : 12.5;
-  S.weights.b2u = est;
+  S.weights.b2u = est*2;               // kayit TOPLAM kg olarak tutulur
   if(!S.loadTypes) S.loadTypes = {};
-  if(S.loadTypes.b2u == null) S.loadTypes.b2u = "side";  // her kola ayrı yükleniyor
+  if(S.loadTypes.b2u == null) S.loadTypes.b2u = "total";
   save();
+}
+
+/* ESKI KAYIT DUZELTMESI — "side" modu kaldirildi.
+   Eskiden bu moddaki hareketlerde kayitli sayi KOL BASINA idi; artik
+   her hareket TOPLAM kg saklaniyor. Bu yuzden eski degerleri ikiye
+   katliyoruz ki fiziksel yuk ayni kalsin, ama gecmis/ilerleme
+   ekranlarinda diger hareketlerle ayni birimden gorunsun. */
+function migrateSideToTotal(){
+  if(S.migratedSideToTotal) return;
+  const ids = Object.keys(S.loadTypes||{}).filter(k => S.loadTypes[k] === "side");
+  ids.forEach(id => {
+    if(S.weights[id] != null) S.weights[id] = Math.round(S.weights[id]*2*100)/100;
+    (S.sessions||[]).forEach(sess => {
+      const e = sess.entries && sess.entries[id];
+      if(e && e.kg != null) e.kg = Math.round(e.kg*2*100)/100;
+    });
+    if(S.live && S.live.entries && S.live.entries[id] && S.live.entries[id].kg != null){
+      S.live.entries[id].kg = Math.round(S.live.entries[id].kg*2*100)/100;
+    }
+    /* Artis da kol basinaydi — toplamda iki katina denk gelir */
+    if(S.incs && S.incs[id] != null) S.incs[id] = Math.round(S.incs[id]*2*100)/100;
+    S.loadTypes[id] = "total";
+  });
+  S.migratedSideToTotal = true;
 }
 
 /* Yarim kalmis antrenmani geri yukle — uygulama kazara kapandiysa
@@ -3188,6 +3241,7 @@ function seedMissingWeights(){
 }
 
 function runMigrations(){
+  migrateSideToTotal();   // once birim duzeltmesi, sonra digerleri
   migrateB2u();
   migrateTieredRecalibration();
   seedMissingWeights();
