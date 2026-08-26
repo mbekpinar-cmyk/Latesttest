@@ -839,7 +839,7 @@ const PROGRAM = {
     {id:"b2u", n:"Üst Göğüs Makinesi (Eğik)", type:"sec",  sets:3, scheme:"3x10",    target:10, inc:2.5, pct:0.60, test:[25,10]},
     {id:"b3", n:"Seated Cable Row",      type:"acc",  sets:3, scheme:"3x10-14", total:42, min:10, max:14,  inc:2.5, pct:0.55, test:[40,10]},
     {id:"b4", n:"Reverse Pec Deck",      type:"acc",  sets:3, scheme:"3x12-15", total:45, min:12, max:15,  inc:2.5, pct:0.50, test:[25,12]},
-    {id:"b5", n:"Seated Dumbbell Curl",  type:"acc",  sets:3, scheme:"3x8-12",  total:36, min:8, max:12,  inc:2,   pct:0.55, test:[10,8]},
+    {id:"b5", n:"Biceps Curl",           type:"acc",  sets:3, scheme:"3x8-15",  total:45, min:8, max:15,  inc:2.5, step:5, pct:0.55, test:[20,8]},
     AB_CRUNCH,
   ]},
   C: { name:"Antrenman C", ex:[
@@ -847,7 +847,7 @@ const PROGRAM = {
     {id:"c2", n:"Hack Squat / Leg Press",type:"sec",  sets:3, scheme:"3x10",    target:10, inc:5,   pct:0.60, test:[70,10]},
     {id:"c3", n:"Machine Row",           type:"sec4", sets:4, scheme:"4x10",    target:10, inc:2.5, pct:0.60, test:[40,8]},
     {id:"c4", n:"Pec Deck (Chest Fly)",  type:"acc",  sets:3, scheme:"3x10-14", total:42, min:10, max:14,  inc:2.5, pct:0.55, test:[25,10]},
-    {id:"c5", n:"Cable Pushdown",        type:"acc",  sets:3, scheme:"3x8-12",  total:36, min:8, max:12,  inc:2.5, pct:0.55, test:[20,8]},
+    {id:"c5", n:"Triceps Makinesi",      type:"acc",  sets:3, scheme:"3x8-15",  total:45, min:8, max:15,  inc:2.5, step:5, pct:0.55, test:[20,8]},
     AB_CRUNCH,
   ]},
 };
@@ -891,6 +891,8 @@ const blank = () => ({
   bodyweight: 134,
   weights: {},
   incs: {},
+  steps: {},                         // exId -> makinenin gercek kademesi (kg)
+  migratedCoarseSteps: false,
   nextIdx: 0,
   sessions: [],
   bwLog: [],
@@ -949,6 +951,27 @@ function allEx(){
 function findEx(id){ return allEx().find(e => e.id === id); }
 function incOf(ex){ return S.incs[ex.id] != null ? S.incs[ex.id] : ex.inc; }
 
+/* ---- MAKINE KADEMESI ------------------------------------------------
+   Pinli makinelerde 1.25 / 2.5 gibi araliklar fiziksel olarak yok.
+   stepOf() o makinede gercekten secilebilen en kucuk adimi verir;
+   tanimlanmamissa normal artis miktarina duser (eski davranis).      */
+function stepOf(ex){
+  if(S.steps && S.steps[ex.id] != null) return S.steps[ex.id];
+  return ex.step != null ? ex.step : incOf(ex);
+}
+const snapStep = (v, st) => st > 0 ? Math.max(st, Math.round(v/st)*st) : v;
+
+/* Kademe, calisilan agirligin %10'undan buyukse tek bir pim atlamak
+   cok buyuk bir sicrama demektir (25 kg'da 5 kg = %20). Bu hareketlerde
+   agirlik yerine TEKRAR ilerler; aralik dolunca tam kademe atlanir.
+   Sadece "acc" tipinde calisir — main/sec zaten sabit hedef tekrarli. */
+function isCoarse(ex, cur){
+  if(ex.type !== "acc") return false;
+  const w = cur != null ? cur : S.weights[ex.id];
+  if(w == null || w <= 0) return false;
+  return stepOf(ex) / w > 0.10;
+}
+
 function seedWeights(tests){
   allEx().forEach(ex => {
     if(ex.type === "bw") return;
@@ -974,6 +997,20 @@ function progressDecision(ex, reps, rpeArr, cur){
     if(last == null) return {weight:cur, tier:"incomplete"};
     if(last < ex.target){
       return {weight:Math.max(mround(cur*0.9, 2.5), 2.5), tier:"deload", last, avgRpe};
+    }
+    /* ZAYIF SET KORUMASI — son set hedefi tutsa bile, ONCEKI setlerden biri
+       hedefin %70'inin altinda kaldiysa o agirlik henuz oturmamistir.
+       (Ornek: 5 · 6 · 10 — son set uzun dinlenmeyle kurtarilmis.)
+       Deload yok, sadece artis durur. Sadece sec/sec4'te: main tipinde
+       ilk setler zaten sabit hedefle giriliyor. */
+    if(ex.type === "sec" || ex.type === "sec4"){
+      const prior = reps.slice(0, lastIdx).filter(r => r != null);
+      const floorReps = ex.target * 0.7;
+      const weak = prior.filter(r => r < floorReps);
+      if(weak.length){
+        return {weight:cur, tier:"hold_weak_sets", last, avgRpe,
+                weakReps:weak, floorReps:Math.round(floorReps*10)/10};
+      }
     }
     const ratio = last / ex.target;
     /* Hedefin 3 katindan fazla tekrar — agirlik gercekten geride kalmis,
@@ -1004,6 +1041,36 @@ function progressDecision(ex, reps, rpeArr, cur){
     const maxReps = ex.max != null ? ex.max : minReps;
     const filled = reps.filter(r => r != null);
     const sum = filled.reduce((a,b)=> a + b, 0);
+
+    /* ---- KABA KADEME MODU -------------------------------------------
+       Makinenin kademesi cok buyukse agirlik her antrenman artamaz.
+       Bunun yerine cift ilerleme: once tekrarlar tavana tirmanir, tavan
+       dolunca TEK SEFERDE tam bir kademe atlanir ve tekrarlar tabana doner.
+       25 kg x 15 tekrar ile 30 kg x 8 tekrar birbirine cok yakin is. */
+    if(isCoarse(ex, cur)){
+      const st = stepOf(ex);
+      if(filled.length < ex.sets){
+        const worstP = filled.length ? Math.min(...filled) : 0;
+        return {weight:cur, tier:"coarse_partial", coarse:true, step:st,
+                worst:worstP, minReps, maxReps, nextTarget:Math.max(minReps, worstP), avgRpe};
+      }
+      const worstC = Math.min(...filled);
+      if(worstC >= maxReps){
+        /* Tavan doldu — ama son setler RPE 9.5+ ise bir hafta daha bekle,
+           kademe atlamak zaten buyuk bir sicrama. */
+        if(avgRpe != null && avgRpe > 9){
+          return {weight:cur, tier:"coarse_hold", coarse:true, step:st,
+                  worst:worstC, minReps, maxReps, nextTarget:maxReps, avgRpe};
+        }
+        return {weight:snapStep(cur + st, st), tier:"coarse_step_up", coarse:true, step:st,
+                worst:worstC, minReps, maxReps, nextTarget:minReps, avgRpe};
+      }
+      /* Tavan dolmadi — agirlik ayni, hedef en zayif setten bir fazlasi. */
+      const nt = Math.min(maxReps, Math.max(minReps, worstC + 1));
+      return {weight:cur, tier:"coarse_rep_up", coarse:true, step:st,
+              worst:worstC, minReps, maxReps, nextTarget:nt, avgRpe};
+    }
+
     const hit = filled.length >= ex.sets && filled.every(r => r >= minReps);
     if(!hit){
       const worst = filled.length ? Math.min(...filled) : 0;
@@ -1028,6 +1095,22 @@ function progress(ex, reps, rpeArr){
   return progressDecision(ex, reps, rpeArr).weight;
 }
 
+/* Kaba kademe modundaki hareketin BU antrenmandaki tekrar hedefi.
+   Saklanmiyor — son antrenmanin karariyla geriye donuk turetiliyor,
+   decisionNote ile ayni kaynaktan beslensin diye. */
+function nextTargetReps(ex){
+  if(!isCoarse(ex)) return null;
+  for(let i=S.sessions.length-1; i>=0; i--){
+    const e = S.sessions[i].entries[ex.id];
+    if(e && e.kg != null && e.reps){
+      const d = progressDecision(ex, e.reps, e.rpe, e.kg);
+      if(d.nextTarget != null) return d.nextTarget;
+      break;
+    }
+  }
+  return ex.min != null ? ex.min : null;
+}
+
 function warmups(ex){
   const w = S.weights[ex.id];
   if(w == null) return [];
@@ -1040,7 +1123,7 @@ function warmups(ex){
    PLAKA HESAPLAYICI
    ========================================================= */
 /* Dumbbell ve vücut ağırlığı hareketlerinde plaka takmıyorsun */
-const NO_PLATES = ["b5","b6","c6"];
+const NO_PLATES = ["b5","c5","b6","c6"];
 const ALL_PLATES = [25,20,15,10,5,2.5,2,1.25,1];
 /* Plakalarda 1.25 gibi degerler var — fmtKg 1 ondalikla yuvarlayip 1.3 yapiyor */
 const fmtP = v => (Math.round(v*100)/100).toString();
@@ -1240,6 +1323,14 @@ function seriesFor(exId){
                     e.rpe.filter(v=>v!=null).reduce((a,b)=>a+b,0)/e.rpe.filter(v=>v!=null).length : null });
   });
   return out;
+}
+
+/* Bir hareketin belirli bir tarihteki hacmi: kg x toplam tekrar */
+function volumeOfEntry(exId, date){
+  const s = S.sessions.find(x => x.date === date);
+  const e = s && s.entries[exId];
+  if(!e || e.kg == null) return 0;
+  return (e.reps||[]).reduce((a,r)=> a + (r||0)*e.kg, 0);
 }
 
 function sessionVolume(s){
@@ -1615,7 +1706,9 @@ function renderSession(){
       <div class="ex-icon">${exerciseThumb(ex.id)}</div>
       <div class="ex-info">
         <div class="ex-name">${esc(ex.n)}</div>
-        <div class="ex-scheme">${ex.scheme}<span class="sep">•</span>RPE ${rpeT ?? '–'}</div>
+        <div class="ex-scheme">${ex.scheme}<span class="sep">•</span>RPE ${rpeT ?? '–'}${
+          (()=>{ const t = nextTargetReps(ex); return t ? `<span class="sep">•</span><span style="color:var(--green)">hedef ${t} tekrar</span>` : ''; })()
+        }</div>
       </div>
       <div class="ex-side">
         <div class="ormwrap">
@@ -1719,6 +1812,13 @@ function renderDetail(){
     <div class="dethead">
       <div class="pills">
         <div class="pill">${ex.scheme}<span>•</span><span>Hedef RPE</span><span class="hot">${rpeT ?? '–'}</span></div>
+        ${(()=>{
+          const t = nextTargetReps(ex);
+          if(!t) return '';
+          const st = stepOf(ex);
+          const top = ex.max != null ? ex.max : t;
+          return `<div class="pill"><span>Hedef</span><span class="hot">${t} tekrar</span><span>•</span><span style="color:var(--muted)">${top} olunca +${fmtKg(st)} kg</span></div>`;
+        })()}
       </div>
       <div class="art">${DRAW[ex.id] ? exerciseSVG(ex.id) : iconSVG('dumbbell')}</div>
     </div>
@@ -1738,9 +1838,9 @@ function renderDetail(){
     </div>
 
     ${ex.type!=="bw" ? `<div class="stepper">
-      <button onclick="adjustKg(-2.5)">−</button>
+      <button onclick="adjustKg(-${isCoarse(ex, en.kg) ? stepOf(ex) : 2.5})">−</button>
       <div class="val"><span class="n">${fmtKg(en.kg)}</span><span class="u">kg</span></div>
-      <button onclick="adjustKg(2.5)">+</button>
+      <button onclick="adjustKg(${isCoarse(ex, en.kg) ? stepOf(ex) : 2.5})">+</button>
     </div>
     ${plateCard(ex, en.kg)}` : '<div class="spacer"></div>'}
 
@@ -2111,6 +2211,16 @@ function decisionNote(ex, e){
       return `Hedefi rahat tutturdun${rpeTxt} ${to} (çift artış)`;
     case "normal":
       return `Hedefi (${ex.target}+ tekrar) tutturdun${rpeTxt} ${to}`;
+    case "hold_weak_sets":
+      return `Son set hedefi tuttu ama ilk setler çok düştü (${d.weakReps.join(", ")} — hedef ${ex.target}) ${to} (bu ağırlık henüz oturmadı, aynı kiloda tekrar dene)`;
+    case "coarse_step_up":
+      return `Tüm setler ${d.maxReps} tekrarı tuttu${rpeTxt} ${to} (bir kademe atlandı, hedef ${d.minReps} tekrara döner)`;
+    case "coarse_hold":
+      return `Aralığın tepesindesin ama zorlanma yüksekti${rpeTxt} ${to} (kademe atlamak için bir hafta daha)`;
+    case "coarse_rep_up":
+      return `En zayıf setin ${d.worst}/${d.maxReps} tekrar${rpeTxt} — makine kademesi ${fmtKg(d.step)} kg olduğu için ağırlık değil tekrar artıyor (sonraki hedef ${d.nextTarget})`;
+    case "coarse_partial":
+      return `Setler eksik kaldı ${to} (sonraki hedef ${d.nextTarget} tekrar)`;
     case "acc_missed":
       return `Bir sette en az ${d.minReps} tekrar gerekiyordu, en düşük setin ${d.worst} oldu ${to} (sabit kaldı, deload yok)`;
     case "acc_hold":
@@ -2659,13 +2769,32 @@ function progressEgzersizler(){
   const cutoff = Date.now() - rangeDays*86400000;
   const series = seriesFor(progressExId).filter(p => new Date(p.date).getTime() >= cutoff);
 
-  const rangeLbl = ranges.find(r=>r.id===progressRange).l;
-  const chart = series.length >= 2 ? bigLineChart(series, rangeLbl) : `<div class="chartbox"><div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Bu aralıkta yeterli veri yok</div></div>`;
-
   const ex = findEx(progressExId);
+  const rangeLbl = ranges.find(r=>r.id===progressRange).l;
+
+  /* Kaba kademeli hareketlerde agirlik haftalarca duz gidip sonra basamak
+     yapar — grafige bakinca plato saniliyor. Gercek ilerleme tekrarlarda
+     oldugu icin bu hareketlerde HACIM cizdiriyoruz. */
+  const coarseEx = isCoarse(ex);
+  const chartSeries = coarseEx
+    ? series.map(p => ({...p, kg: volumeOfEntry(progressExId, p.date)})).filter(p => p.kg > 0)
+    : series;
+  const chart = chartSeries.length >= 2
+    ? bigLineChart(chartSeries, rangeLbl)
+    : `<div class="chartbox"><div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Bu aralıkta yeterli veri yok</div></div>`;
+  const coarseNote = coarseEx
+    ? `<div style="font-size:11.5px;color:var(--muted);line-height:1.6;margin:-4px 2px 14px">
+         Kademesi ${fmtKg(stepOf(ex))} kg — ağırlık her antrenman artmaz. Grafik <b>hacim</b> (kg × toplam tekrar) gösteriyor; asıl ilerleme orada.
+       </div>`
+    : '';
+
   const now = S.weights[progressExId];
   const start = series.length ? series[0].kg : now;
   const delta = now - start;
+  /* Kaba kademede agirlik farki neredeyse hep 0 cikar — hacim farkini goster */
+  const dChange = coarseEx && chartSeries.length >= 2
+    ? chartSeries[chartSeries.length-1].kg - chartSeries[0].kg
+    : delta;
   const bestOrm = series.reduce((m,p)=> p.e1rm!=null && p.e1rm>m ? p.e1rm : m, 0);
   const rpeVals = series.map(p=>p.rpe).filter(v=>v!=null);
   const avgRpe = rpeVals.length ? (rpeVals.reduce((a,b)=>a+b,0)/rpeVals.length).toFixed(1) : "—";
@@ -2695,6 +2824,7 @@ function progressEgzersizler(){
     </div>
     ${rSeg}
     ${chart}
+    ${coarseNote}
     <div class="statgrid">
       <div><div class="k">Tahmini 1RM</div><div class="v">${fmtKg(bestOrm)||'—'}<small>kg</small></div></div>
       <div><div class="k">Başarı</div><div class="v">${rate}<small>%</small></div></div>
@@ -2705,8 +2835,8 @@ function progressEgzersizler(){
       <div class="icon">↗</div>
     </div>
     <div class="factrow">
-      <div><div class="k">Toplam Değişim</div><div class="v" style="color:${delta>=0?'var(--green)':'var(--red)'}">${delta>=0?'+':''}${fmtKg(delta)} kg</div></div>
-      <div class="icon">${delta>=0?'↗':'↘'}</div>
+      <div><div class="k">Toplam Değişim${coarseEx?' (hacim)':''}</div><div class="v" style="color:${dChange>=0?'var(--green)':'var(--red)'}">${dChange>=0?'+':''}${coarseEx?Math.round(dChange).toLocaleString('tr-TR'):fmtKg(dChange)} ${coarseEx?'kg·tekrar':'kg'}</div></div>
+      <div class="icon">${dChange>=0?'↗':'↘'}</div>
     </div>
   `;
 }
@@ -2871,11 +3001,16 @@ function renderSettings(){
   const blocks = ORDER.map(k=>{
     const rows = PROGRAM[k].ex.map(ex=>{
       if(ex.type==="bw") return `<div class="settings-ex"><div class="nm">${esc(ex.n)}<small>vücut ağırlığı</small></div></div>`;
+      const coarse = isCoarse(ex);
+      const sub = coarse
+        ? `<small style="color:var(--amber)">Kaba kademe · ${fmtKg(stepOf(ex))} kg · tekrarla ilerler</small>`
+        : `<small>Artış: ${fmtKg(incOf(ex))} kg</small>`;
       return `<div class="settings-ex">
-        <div class="nm">${esc(ex.n)}<small>Artış: ${fmtKg(incOf(ex))} kg</small></div>
+        <div class="nm">${esc(ex.n)}${sub}</div>
         <div class="in">
           <input type="number" inputmode="decimal" step="0.5" value="${S.weights[ex.id]??''}" onchange="setW('${ex.id}',this.value)" placeholder="kg">
           <input type="number" inputmode="decimal" step="0.5" value="${incOf(ex)}" onchange="setInc('${ex.id}',this.value)" placeholder="artış">
+          <input type="number" inputmode="decimal" step="0.5" value="${stepOf(ex)}" onchange="setStep('${ex.id}',this.value)" placeholder="kademe">
         </div></div>`;
     }).join("");
     return `<h2>${PROGRAM[k].name}</h2><div class="card" style="padding:4px 16px">${rows}</div>`;
@@ -2902,7 +3037,7 @@ function renderSettings(){
           onclick="toggleBell()">${S.restBell?'Açık':'Kapalı'}</button></div></div>
     </div>
     <p class="note">Mola zili: süre bitince ses çalar. Açıkken mola boyunca çok kısık bir ses çalar — bu olmadan iPhone sayfayı dondurur ve zil hiç çalmaz. Podcast veya müziğini duraklatabilir, telefon sessiz moddayken de duyulmaz. Sayaç, zil kapalıyken de doğru çalışır.</p>
-    <p class="note">Ağırlık: bir sonraki antrenmanda kullanacağın kilo. Artış: hedefi tutturduğunda eklenecek kilo — salonundaki makinenin kademesine göre ayarla.</p>
+    <p class="note">Ağırlık: bir sonraki antrenmanda kullanacağın kilo. Artış: hedefi tutturduğunda eklenecek kilo. Kademe: o makinede gerçekten seçilebilen en küçük adım (pinli makinelerde genelde 5 kg). Kademe, ağırlığın %10'undan büyükse hareket kaba kademe moduna geçer — ağırlık her antrenman artmaz, önce tekrarlar tavana çıkar, sonra tek seferde bir kademe atlanır.</p>
     ${blocks}
     <div class="divider"></div>
     <h2>Plakalar</h2>
@@ -2939,6 +3074,7 @@ window.toggleBell = function(){
 };
 window.setW = function(id,v){ const n=parseFloat(v); if(n>0){S.weights[id]=n; save();} };
 window.setInc = function(id,v){ const n=parseFloat(v); if(n>0){S.incs[id]=n; save(); render();} };
+window.setStep = function(id,v){ const n=parseFloat(v); if(n>0){ if(!S.steps) S.steps={}; S.steps[id]=n; save(); render();} };
 window.setBw = function(v){ const n=parseFloat(v); if(n>0){S.bodyweight=n; save();} };
 window.cycleNext = function(){ S.nextIdx=(S.nextIdx+1)%3; save(); render(); };
 window.exportData = function(){
@@ -3195,6 +3331,63 @@ function migrateSideToTotal(){
   S.migratedSideToTotal = true;
 }
 
+/* =========================================================
+   TEK SEFERLİK GEÇİŞ — kaba kademe + zayıf set kuralı
+   1) b5 artik dumbbell degil, pinli makine. Eskiden dumbbell BASINA kg
+      giriliyor, pime iki kati takiliyordu — kayitlari ikiye katlayip
+      makinede gercekten secilebilen kademeye yuvarliyoruz.
+   2) Kaba kademeli hareketlerin guncel agirligi kademe izgarasina otursun
+      (2.5'lik ek agirlik artik salonda yasak).
+   3) Zayif set kurali yeni — son antrenmani bu kurala gore yeniden
+      degerlendirip yanlis verilmis artislari geri aliyoruz.
+   Agirlik hicbir yerde kendiliginden AZALTILMIYOR; sadece hak edilmemis
+   artis geri alinir.
+   ========================================================= */
+function migrateCoarseSteps(){
+  if(S.migratedCoarseSteps) return;
+  if(!S.setup){ S.migratedCoarseSteps = true; return; }
+
+  /* 1) b5 — dumbbell basina kayit -> makinedeki toplam pim agirligi */
+  const b5 = findExAny("b5");
+  if(b5){
+    const st = stepOf(b5);
+    const dbl = v => snapStep(Math.round(v*2*100)/100, st);
+    (S.sessions||[]).forEach(sess => {
+      const e = sess.entries && sess.entries.b5;
+      if(e && e.kg != null) e.kg = dbl(e.kg);
+    });
+    if(S.live && S.live.entries && S.live.entries.b5 && S.live.entries.b5.kg != null){
+      S.live.entries.b5.kg = dbl(S.live.entries.b5.kg);
+    }
+    if(S.weights.b5 != null) S.weights.b5 = dbl(S.weights.b5);
+    if(S.incs) delete S.incs.b5;   // eski 2 kg'lik dumbbell artisi artik gecersiz
+  }
+
+  /* 2) Kaba kademeli hareketlerin guncel agirligini izgaraya oturt */
+  allEx().forEach(ex => {
+    if(S.weights[ex.id] == null) return;
+    if(!isCoarse(ex)) return;
+    S.weights[ex.id] = snapStep(S.weights[ex.id], stepOf(ex));
+  });
+
+  /* 3) Zayif set kurali — son antrenmani yeniden degerlendir */
+  allEx().forEach(ex => {
+    if(ex.type !== "sec" && ex.type !== "sec4") return;
+    for(let i=S.sessions.length-1; i>=0; i--){
+      const e = S.sessions[i].entries[ex.id];
+      if(e && e.kg != null && e.reps){
+        const d = progressDecision(ex, e.reps, e.rpe, e.kg);
+        if(d.tier === "hold_weak_sets" && S.weights[ex.id] != null && S.weights[ex.id] > d.weight){
+          S.weights[ex.id] = d.weight;
+        }
+        break;
+      }
+    }
+  });
+
+  S.migratedCoarseSteps = true;
+}
+
 /* Yarim kalmis antrenmani geri yukle — uygulama kazara kapandiysa
    girdigin setler kaybolmasin. Cok eski (24 saatten fazla) kayitlari
    sormadan atmiyoruz; kullaniciya birakiyoruz. */
@@ -3244,7 +3437,9 @@ function runMigrations(){
   migrateSideToTotal();   // once birim duzeltmesi, sonra digerleri
   migrateB2u();
   migrateTieredRecalibration();
+  migrateCoarseSteps();
   seedMissingWeights();
+  save();
 }
 
 /* =========================================================
