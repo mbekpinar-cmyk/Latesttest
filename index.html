@@ -959,14 +959,21 @@ function stepOf(ex){
   if(S.steps && S.steps[ex.id] != null) return S.steps[ex.id];
   return ex.step != null ? ex.step : incOf(ex);
 }
+/* Kademe ACIKCA tanimlanmis mi? Sadece pinli makinelerde tanimliyoruz.
+   Plakali makinelerde 1.25'lik plakayla istedigin araligi kurabilirsin,
+   orada "kademe" diye bir kisit yok — kaba mod onlara ASLA uygulanmaz. */
+function hasStep(ex){
+  return (S.steps && S.steps[ex.id] != null) || ex.step != null;
+}
 const snapStep = (v, st) => st > 0 ? Math.max(st, Math.round(v/st)*st) : v;
 
 /* Kademe, calisilan agirligin %10'undan buyukse tek bir pim atlamak
    cok buyuk bir sicrama demektir (25 kg'da 5 kg = %20). Bu hareketlerde
    agirlik yerine TEKRAR ilerler; aralik dolunca tam kademe atlanir.
-   Sadece "acc" tipinde calisir — main/sec zaten sabit hedef tekrarli. */
+   Sadece "acc" tipinde ve kademesi tanimli hareketlerde calisir. */
 function isCoarse(ex, cur){
   if(ex.type !== "acc") return false;
+  if(!hasStep(ex)) return false;
   const w = cur != null ? cur : S.weights[ex.id];
   if(w == null || w <= 0) return false;
   return stepOf(ex) / w > 0.10;
@@ -3002,15 +3009,16 @@ function renderSettings(){
     const rows = PROGRAM[k].ex.map(ex=>{
       if(ex.type==="bw") return `<div class="settings-ex"><div class="nm">${esc(ex.n)}<small>vücut ağırlığı</small></div></div>`;
       const coarse = isCoarse(ex);
+      const pinned = hasStep(ex);
       const sub = coarse
         ? `<small style="color:var(--amber)">Kaba kademe · ${fmtKg(stepOf(ex))} kg · tekrarla ilerler</small>`
-        : `<small>Artış: ${fmtKg(incOf(ex))} kg</small>`;
+        : `<small>Artış: ${fmtKg(incOf(ex))} kg${pinned?` · kademe ${fmtKg(stepOf(ex))} kg`:''}</small>`;
       return `<div class="settings-ex">
         <div class="nm">${esc(ex.n)}${sub}</div>
         <div class="in">
           <input type="number" inputmode="decimal" step="0.5" value="${S.weights[ex.id]??''}" onchange="setW('${ex.id}',this.value)" placeholder="kg">
           <input type="number" inputmode="decimal" step="0.5" value="${incOf(ex)}" onchange="setInc('${ex.id}',this.value)" placeholder="artış">
-          <input type="number" inputmode="decimal" step="0.5" value="${stepOf(ex)}" onchange="setStep('${ex.id}',this.value)" placeholder="kademe">
+          ${pinned?`<input type="number" inputmode="decimal" step="0.5" value="${stepOf(ex)}" onchange="setStep('${ex.id}',this.value)" placeholder="kademe">`:''}
         </div></div>`;
     }).join("");
     return `<h2>${PROGRAM[k].name}</h2><div class="card" style="padding:4px 16px">${rows}</div>`;
@@ -3037,7 +3045,7 @@ function renderSettings(){
           onclick="toggleBell()">${S.restBell?'Açık':'Kapalı'}</button></div></div>
     </div>
     <p class="note">Mola zili: süre bitince ses çalar. Açıkken mola boyunca çok kısık bir ses çalar — bu olmadan iPhone sayfayı dondurur ve zil hiç çalmaz. Podcast veya müziğini duraklatabilir, telefon sessiz moddayken de duyulmaz. Sayaç, zil kapalıyken de doğru çalışır.</p>
-    <p class="note">Ağırlık: bir sonraki antrenmanda kullanacağın kilo. Artış: hedefi tutturduğunda eklenecek kilo. Kademe: o makinede gerçekten seçilebilen en küçük adım (pinli makinelerde genelde 5 kg). Kademe, ağırlığın %10'undan büyükse hareket kaba kademe moduna geçer — ağırlık her antrenman artmaz, önce tekrarlar tavana çıkar, sonra tek seferde bir kademe atlanır.</p>
+    <p class="note">Ağırlık: bir sonraki antrenmanda kullanacağın kilo. Artış: hedefi tutturduğunda eklenecek kilo. Kademe alanı sadece pinli makinelerde (Biceps, Triceps) görünür — o makinede gerçekten seçilebilen en küçük adım. Kademe, ağırlığın %10'undan büyükse hareket kaba kademe moduna geçer: ağırlık her antrenman artmaz, önce tekrarlar tavana çıkar, sonra tek seferde bir kademe atlanır. Plakalı makineler bu moda hiç girmez.</p>
     ${blocks}
     <div class="divider"></div>
     <h2>Plakalar</h2>
