@@ -1423,6 +1423,7 @@ let progressTab = "genel";      // genel | egzersizler | vucut | performans
 let historyOpen = null;         // session index expanded
 let progressExId = null;        // selected exercise in progress
 let progressRange = "3ay";      // 3ay | 6ay | 1yil | tumu
+let progressMetric = null;      // null=otomatik | agirlik | e1rm | hacim
 let hiddenSeries = {};          // {exId:true} -> hidden on the all-lifts chart
 const LINE_COLORS = ["#F5A623","#4ADE80","#60A5FA","#F472B6","#A78BFA","#FBBF24",
   "#34D399","#FB923C","#22D3EE","#E879F9","#FACC15","#38BDF8","#F87171","#2DD4BF",
@@ -2804,27 +2805,84 @@ function progressEgzersizler(){
   const ex = findEx(progressExId);
   const rangeLbl = ranges.find(r=>r.id===progressRange).l;
 
-  /* Kaba kademeli hareketlerde agirlik haftalarca duz gidip sonra basamak
-     yapar — grafige bakinca plato saniliyor. Gercek ilerleme tekrarlarda
-     oldugu icin bu hareketlerde HACIM cizdiriyoruz. */
+  /* Metrik secimi. Otomatik varsayilan: kaba kademede HACIM (agirlik grafigi
+     yanlislikla plato gibi gorunur), digerlerinde AGIRLIK. Kullanici secerse
+     o gecerli — e1RM agirlik+tekrar+RPE'yi tek cizgide birlestirir ve agirlik
+     duz giderken bile gercek ilerlemeyi gosterir. */
   const coarseEx = isCoarse(ex);
-  const chartSeries = coarseEx
-    ? series.map(p => ({...p, kg: volumeOfEntry(progressExId, p.date)})).filter(p => p.kg > 0)
-    : series;
+  const effMetric = progressMetric || (coarseEx ? "hacim" : "agirlik");
+  const metrics = [
+    {id:"agirlik", l:"Ağırlık"},
+    {id:"e1rm",    l:"e1RM"},
+    {id:"hacim",   l:"Hacim"},
+  ];
+  const mSeg = `<div class="rangeseg" style="margin-top:-4px">${metrics.map(m=>
+    `<button class="${effMetric===m.id?'on':''}" onclick="setMetric('${m.id}')">${m.l}</button>`).join("")}</div>`;
+
+  let chartSeries, chartLabel, chartUnit, chartFmt;
+  if(effMetric === "hacim"){
+    chartSeries = series.map(p => ({...p, kg: volumeOfEntry(progressExId, p.date)})).filter(p => p.kg > 0);
+    chartLabel = "Antrenman Hacmi"; chartUnit = "kg·tekrar"; chartFmt = v => Math.round(v).toLocaleString('tr-TR');
+  } else if(effMetric === "e1rm"){
+    chartSeries = series.filter(p => p.e1rm != null).map(p => ({...p, kg: p.e1rm}));
+    chartLabel = "Tahmini 1RM"; chartUnit = "kg"; chartFmt = fmtKg;
+  } else {
+    chartSeries = series;
+    chartLabel = "Çalışma Ağırlığı"; chartUnit = "kg"; chartFmt = fmtKg;
+  }
+
+  /* PR noktalari: TUM gecmise gore o gune kadarki en iyi e1RM'in kirildigi
+     seanslar. Aralik filtresi noktalari gizleyebilir ama PR tanimini bozmaz. */
+  const fullSer = seriesFor(progressExId);
+  /* Ilk e1RM kaydi taban sayilir, PR degildir — PR onceki en iyiyi asmaktir. */
+  const prDates = [];
+  let runBest = null;
+  fullSer.forEach(p => {
+    if(p.e1rm == null) return;
+    if(runBest === null){ runBest = p.e1rm; return; }
+    if(p.e1rm > runBest){ runBest = p.e1rm; prDates.push(p.date); }
+  });
+  const prIdx = effMetric === "e1rm"
+    ? chartSeries.map((p,i)=> prDates.indexOf(p.date) !== -1 ? i : -1).filter(i=>i!==-1)
+    : [];
+
+  const rpeStrip = chartSeries.map(p=>p.rpe);
   const chart = chartSeries.length >= 2
-    ? bigLineChart(chartSeries, rangeLbl)
+    ? bigLineChart(chartSeries, rangeLbl, {label:chartLabel, unit:chartUnit, fmt:chartFmt, prs:prIdx, rpe:rpeStrip})
     : `<div class="chartbox"><div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Bu aralıkta yeterli veri yok</div></div>`;
-  const coarseNote = coarseEx
+
+  const coarseNote = coarseEx && effMetric === "hacim"
     ? `<div style="font-size:11.5px;color:var(--muted);line-height:1.6;margin:-4px 2px 14px">
          Kademesi ${fmtKg(stepOf(ex))} kg — ağırlık her antrenman artmaz. Grafik <b>hacim</b> (kg × toplam tekrar) gösteriyor; asıl ilerleme orada.
        </div>`
-    : '';
+    : (effMetric === "e1rm" && ex.type === "acc" && (ex.max||0) >= 12
+    ? `<div style="font-size:11.5px;color:var(--muted);line-height:1.6;margin:-4px 2px 14px">
+         Yüksek tekrarlı hareketlerde e1RM tahmini kabalaşır — eğilim doğrudur, mutlak değer değil.
+       </div>`
+    : '');
+
+  /* Rekorlar: en iyi e1RM (tarihiyle), en agir set, en yuksek seans hacmi */
+  let recOrm = null, recSet = null, recVol = null;
+  fullSer.forEach(p => { if(p.e1rm != null && (!recOrm || p.e1rm > recOrm.v)) recOrm = {v:p.e1rm, d:p.date}; });
+  S.sessions.forEach(s => {
+    const e = s.entries[progressExId]; if(!e || e.kg == null) return;
+    const best = Math.max(0, ...(e.reps||[]).map(r=>r||0));
+    if(best > 0 && (!recSet || e.kg > recSet.kg || (e.kg === recSet.kg && best > recSet.r))) recSet = {kg:e.kg, r:best, d:s.date};
+    const vol = (e.reps||[]).reduce((a,r)=> a + (r||0)*e.kg, 0);
+    if(vol > 0 && (!recVol || vol > recVol.v)) recVol = {v:vol, d:s.date};
+  });
+  const records = (recOrm || recSet || recVol) ? `
+    <div class="statgrid">
+      <div><div class="k">En iyi e1RM</div><div class="v">${recOrm?fmtKg(recOrm.v):'—'}<small>kg</small></div>${recOrm?`<div class="k" style="margin:5px 0 0">${trDate(recOrm.d)}</div>`:''}</div>
+      <div><div class="k">En ağır set</div><div class="v">${recSet?fmtKg(recSet.kg):'—'}<small>${recSet?'kg×'+recSet.r:''}</small></div>${recSet?`<div class="k" style="margin:5px 0 0">${trDate(recSet.d)}</div>`:''}</div>
+      <div><div class="k">Seans hacmi</div><div class="v" style="font-size:16px">${recVol?Math.round(recVol.v).toLocaleString('tr-TR'):'—'}<small>kg·tk</small></div>${recVol?`<div class="k" style="margin:5px 0 0">${trDate(recVol.d)}</div>`:''}</div>
+    </div>` : '';
 
   const now = S.weights[progressExId];
   const start = series.length ? series[0].kg : now;
   const delta = now - start;
-  /* Kaba kademede agirlik farki neredeyse hep 0 cikar — hacim farkini goster */
-  const dChange = coarseEx && chartSeries.length >= 2
+  /* Toplam degisim secili metrigi takip eder */
+  const dChange = effMetric !== "agirlik" && chartSeries.length >= 2
     ? chartSeries[chartSeries.length-1].kg - chartSeries[0].kg
     : delta;
   const bestOrm = series.reduce((m,p)=> p.e1rm!=null && p.e1rm>m ? p.e1rm : m, 0);
@@ -2855,8 +2913,10 @@ function progressEgzersizler(){
       <select onchange="progressExId=this.value; render()">${opts}</select>
     </div>
     ${rSeg}
+    ${mSeg}
     ${chart}
     ${coarseNote}
+    ${records}
     <div class="statgrid">
       <div><div class="k">Tahmini 1RM</div><div class="v">${fmtKg(bestOrm)||'—'}<small>kg</small></div></div>
       <div><div class="k">Başarı</div><div class="v">${rate}<small>%</small></div></div>
@@ -2867,15 +2927,18 @@ function progressEgzersizler(){
       <div class="icon">↗</div>
     </div>
     <div class="factrow">
-      <div><div class="k">Toplam Değişim${coarseEx?' (hacim)':''}</div><div class="v" style="color:${dChange>=0?'var(--green)':'var(--red)'}">${dChange>=0?'+':''}${coarseEx?Math.round(dChange).toLocaleString('tr-TR'):fmtKg(dChange)} ${coarseEx?'kg·tekrar':'kg'}</div></div>
+      <div><div class="k">Toplam Değişim${effMetric==='hacim'?' (hacim)':effMetric==='e1rm'?' (e1RM)':''}</div><div class="v" style="color:${dChange>=0?'var(--green)':'var(--red)'}">${dChange>=0?'+':''}${effMetric==='hacim'?Math.round(dChange).toLocaleString('tr-TR'):fmtKg(dChange)} ${effMetric==='hacim'?'kg·tekrar':'kg'}</div></div>
       <div class="icon">${dChange>=0?'↗':'↘'}</div>
     </div>
   `;
 }
 window.setRange = function(r){ progressRange=r; render(); };
+window.setMetric = function(m){ progressMetric=m; render(); };
 
-function bigLineChart(series, rangeLbl){
-  const W=320, H=170, PL=32, PR=10, PT=14, PB=26;
+function bigLineChart(series, rangeLbl, o){
+  o = Object.assign({label:"Çalışma Ağırlığı", unit:"kg", fmt:fmtKg, prs:[], rpe:null}, o||{});
+  const hasRpe = o.rpe && o.rpe.some(v=>v!=null);
+  const W=320, H=hasRpe?196:170, PL=32, PR=10, PT=14, PB=hasRpe?52:26;
   const iw=W-PL-PR, ih=H-PT-PB;
   const vals = series.map(p=>p.kg);
   let mn=Math.min(...vals), mx=Math.max(...vals);
@@ -2897,6 +2960,33 @@ function bigLineChart(series, rangeLbl){
     series.map((p,i)=>`L${xOf(i).toFixed(1)} ${yOf(p.kg).toFixed(1)}`).join(" ") +
     ` L${xOf(series.length-1).toFixed(1)} ${(PT+ih).toFixed(1)} Z`;
   const dots = series.map((p,i)=>`<circle cx="${xOf(i).toFixed(1)}" cy="${yOf(p.kg).toFixed(1)}" r="3.2" fill="var(--bg)" stroke="var(--amber)" stroke-width="2"/>`).join("");
+
+  /* PR noktalari: o gune kadarki en iyi e1RM'in kirildigi seanslar.
+     Buyuk dolu amber nokta; sonuncusuna deger etiketi. */
+  let prMarks = "";
+  (o.prs||[]).forEach((idx,k)=>{
+    if(idx<0 || idx>=series.length) return;
+    const x=xOf(idx), y=yOf(series[idx].kg);
+    const last = k === o.prs.length-1;
+    prMarks += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5.5" fill="var(--amber)" stroke="var(--bg)" stroke-width="2"/>`;
+    const lbl = last ? `PR ${o.fmt(series[idx].kg)}` : "PR";
+    const anchor = x > W-46 ? "end" : (x < PL+20 ? "start" : "middle");
+    prMarks += `<text x="${x.toFixed(1)}" y="${Math.max(10,(y-10)).toFixed(1)}" text-anchor="${anchor}" font-size="9" fill="var(--amber)" font-weight="${last?'800':'700'}">${lbl}</text>`;
+  });
+
+  /* RPE seridi: grafikle ayni x ekseninde kucuk cubuklar.
+     <=7.5 sonuk, 8-9 amber, >=9.5 kirmizi — set ekranindaki renk diliyle ayni. */
+  let rpeRow = "";
+  if(hasRpe){
+    const by = H-24, bh = v => 4 + Math.max(0, Math.min(1,(v-6)/4))*10;
+    rpeRow += `<text x="${PL-4}" y="${by+4}" text-anchor="end" font-size="8" fill="var(--faint)" font-weight="700">RPE</text>`;
+    o.rpe.forEach((v,i)=>{
+      if(v==null) return;
+      const col = v>=9.5 ? "var(--red)" : v>=8 ? "var(--amber)" : "var(--faint)";
+      const h = bh(v);
+      rpeRow += `<rect x="${(xOf(i)-3).toFixed(1)}" y="${(by+7-h).toFixed(1)}" width="6" height="${h.toFixed(1)}" rx="1.5" fill="${col}" opacity="${v>=8?'0.9':'0.55'}"/>`;
+    });
+  }
   const step = Math.max(1, Math.ceil(series.length/5));
   const xl = series.map((p,i)=>(i%step===0||i===series.length-1)?
     `<text x="${xOf(i).toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="9" fill="var(--muted)" font-weight="600">${trDate(p.date)}</text>`:'').join("");
@@ -2906,14 +2996,14 @@ function bigLineChart(series, rangeLbl){
   const delta = now-first;
   return `<div class="chartbox">
     <div class="hd">
-      <div><div class="l">Çalışma Ağırlığı</div><div class="big">${fmtKg(now)}<small>kg</small></div><div class="tag">Mevcut</div></div>
-      <div class="right"><div class="chg ${delta>=0?'up':'dn'}">${delta>=0?'+':''}${fmtKg(delta)} kg</div><div class="sub2">Son ${rangeLbl||''}</div></div>
+      <div><div class="l">${o.label}</div><div class="big">${o.fmt(now)}<small>${o.unit}</small></div><div class="tag">Mevcut</div></div>
+      <div class="right"><div class="chg ${delta>=0?'up':'dn'}">${delta>=0?'+':''}${o.fmt(delta)} ${o.unit}</div><div class="sub2">Son ${rangeLbl||''}</div></div>
     </div>
     <svg class="chartsvg" viewBox="0 0 ${W} ${H}">
       ${grid}
       <path d="${area}" fill="var(--amber)" opacity=".08"/>
       <path d="${d}" fill="none" stroke="var(--amber)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-      ${dots}${xl}
+      ${dots}${prMarks}${rpeRow}${xl}
     </svg>
   </div>`;
 }
