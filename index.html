@@ -239,8 +239,8 @@ h1{font-size:28px;font-weight:800;letter-spacing:-.03em;margin:6px 0 2px;line-he
 
 /* ---------- exercise animation frames ---------- */
 .exanim{width:100%;height:100%;display:block}
-.exanim .fr{opacity:0;animation:frcycle 2.6s steps(1,end) infinite}
-@keyframes frcycle{0%,100%{opacity:0}0.01%{opacity:1}3.847%{opacity:0}}
+.exanim .fr{opacity:0;animation:frcycle 1.8s steps(1,end) infinite}
+@keyframes frcycle{0%,100%{opacity:0}0.01%{opacity:1}7.14%{opacity:0}}
 @media (prefers-reduced-motion:reduce){
   .exanim .fr{animation:none}
   .exanim .fr:first-child{opacity:1}
@@ -406,6 +406,10 @@ textarea#pasteArea{width:100%;min-height:150px;background:var(--cell);border:1px
   color:var(--text);border-radius:12px;padding:12px;font-family:var(--fn);font-size:12px;
   line-height:1.5;resize:vertical}
 textarea#pasteArea:focus{outline:2px solid var(--amber);outline-offset:-1px}
+.langseg{display:flex;gap:3px;background:var(--cell);border-radius:12px;padding:3px;margin:2px 0 4px}
+.langseg button{flex:1;padding:9px 0;border:0;border-radius:10px;background:transparent;color:var(--muted);
+  font-family:var(--f);font-size:13px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.langseg button.on{background:var(--amber);color:#412402}
 .warnbox{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.35);border-radius:14px;
   padding:14px 16px;margin-bottom:14px;font-size:12.5px;line-height:1.55;color:var(--text)}
 .warnbox b{color:var(--red)}
@@ -507,22 +511,6 @@ body.resting #app{padding-bottom:calc(var(--nav-h) + 110px)}
 <script>
 "use strict";
 
-/* =========================================================
-   HATA GUNLUGU — salonda bir sey patlarsa iz kalsin diye.
-   Son 20 hata localStorage'a yazilir, Ayarlar'da goruntulenir.
-   ========================================================= */
-const ERRKEY = "antrenman_errlog";
-window.onerror = function(msg, src, line, col){
-  try{
-    const log = JSON.parse(localStorage.getItem(ERRKEY) || "[]");
-    log.unshift({ t: new Date().toISOString().slice(0,16).replace("T"," "),
-                  m: String(msg).slice(0,200), l: (line||0)+":"+(col||0) });
-    localStorage.setItem(ERRKEY, JSON.stringify(log.slice(0,20)));
-  }catch(e){}
-};
-window.errLog = function(){ try{ return JSON.parse(localStorage.getItem(ERRKEY)||"[]"); }catch(e){ return []; } };
-window.clearErrLog = function(){ try{ localStorage.removeItem(ERRKEY); }catch(e){} render(); };
-
 
 /* =========================================================
    HAREKET ANİMASYONLARI — tamamı sıfırdan çizildi
@@ -566,279 +554,270 @@ const MACH = "#2A3644";   // makine rengi
 const ACC  = "var(--accent)";
 const lerp = (a,b,t) => a+(b-a)*t;
 
-/* Poz motoru — her hareket icin iki poz (A=baslangic, B=kasilma sonu) tanimlanir,
-   aradaki her kare eklem koordinatlarinin dogrusal karisimiyla uretilir.
-   Eski 14 karelik elle cizim sistemi tamamen kaldirildi; DRAW arayuzu ayni kaldi:
-   DRAW[exId](t) 0..1 hareket fazini alir, SVG icerigi doner. viewBox: 0 0 340 210 */
-
-const FRM  = "#4E5A68";   // metal iskelet
-const PADC = "#8A96A6";   // hareketli ped / tutacak
-const BODY = "#C9841A";   // govde ana ton
-const NEAR = "#F5A623";   // yakin kol (vurgu)
-const FAR  = "#7A4E0C";   // uzak kol (derinlik)
-
-const pt   = (x,y) => ({x,y});
-const mixP = (A,B,t) => { const o={}; for(const k in A) o[k] = B[k] ? pt(lerp(A[k].x,B[k].x,t), lerp(A[k].y,B[k].y,t)) : A[k]; return o; };
-const SEG  = (p,q,w,c) => L(p.x,p.y,q.x,q.y,w,c);
-const MIDF = (p,q,f) => pt(p.x+(q.x-p.x)*f, p.y+(q.y-p.y)*f);
-const PLATE = p => C(p.x,p.y,8,FRM) + C(p.x,p.y,4.5,PADC);
-const GRIP  = (wr,h) => R(wr.x-2, wr.y-h, 8, h*2, PADC, 4);
-const GROUND = L(30,195,315,195,2,FRM);
-
-/* Yandan figur: uzak kol arkada koyu, sonra bacak, govde, kafa, yakin kol onde */
-function figSide(o){
-  let s = "";
-  if(o.el) s += SEG(pt(o.sh.x-2,o.sh.y+4), pt(o.el.x-2,o.el.y+4), 10, FAR)
-             +  SEG(pt(o.el.x-2,o.el.y+4), pt(o.wr.x-1,o.wr.y+4), 8, FAR);
-  if(o.knee) s += SEG(o.hip,o.knee,15,BODY) + SEG(o.knee,o.an,11,BODY) + SEG(o.an,o.toe,6,BODY);
-  s += o.tc
-    ? P(`M${o.hip.x.toFixed(1)} ${o.hip.y.toFixed(1)} Q${o.tc.x.toFixed(1)} ${o.tc.y.toFixed(1)} ${o.sh.x.toFixed(1)} ${o.sh.y.toFixed(1)}`,19,BODY)
-    : SEG(o.hip,o.sh,19,BODY);
-  s += C(o.head.x,o.head.y,10.5,BODY);
-  if(o.el) s += SEG(o.sh,o.el,10,NEAR) + SEG(o.el,o.wr,8,NEAR);
-  return s;
-}
-
-/* Onden figur (a5, c4): govde/kafa/bacak sabit, iki kol simetrik hareket eder */
-function figFront(o, shL, shR){
-  return P("M162 138 L158 162",12,FAR) + P("M178 138 L182 162",12,FAR)
-    + P("M170 136 L170 73",22,BODY) + C(170,46,11,BODY)
-    + SEG(shL,o.elL,10,NEAR) + SEG(o.elL,o.wrL,8,NEAR)
-    + SEG(shR,o.elR,10,NEAR) + SEG(o.elR,o.wrR,8,NEAR);
-}
-
-/* Pinli istif (b5, c5): ust uc plaka pimin ustunde, kasilmayla yukselir */
-function pinStack(t){
-  let s = R(258,55,48,140,"#131B26",5) + L(282,60,282,125,2,FRM);
-  for(let i=0;i<3;i++) s += R(263,126+i*10-22*t,38,8,PADC,2);
-  for(let i=0;i<4;i++) s += R(263,156+i*10,38,8,MACH,2);
-  return s;
-}
-
-const POSE = {
-  a1:{A:{hip:pt(128,146),sh:pt(116,86),head:pt(122,64),el:pt(108,112),wr:pt(146,94),knee:pt(174,146),an:pt(178,188),toe:pt(194,192)},
-      B:{sh:pt(120,86),head:pt(126,64),el:pt(158,100),wr:pt(198,92)}},
-  a2:{A:{hip:pt(122,118),sh:pt(114,62),head:pt(119,42),el:pt(128,88),wr:pt(138,104),knee:pt(168,118),an:pt(212,126),toe:pt(224,120)},
-      B:{an:pt(184,164),toe:pt(188,177)}},
-  a3:{A:{hip:pt(150,130),sh:pt(143,74),head:pt(148,52),el:pt(155,48),wr:pt(168,26),knee:pt(190,130),an:pt(194,186),toe:pt(208,190)},
-      B:{el:pt(150,98),wr:pt(170,76)}},
-  a4:{A:{hip:pt(118,113),sh:pt(106,58),head:pt(111,38),el:pt(122,90),wr:pt(132,108),knee:pt(165,115),an:pt(170,162),toe:pt(176,173)},
-      B:{an:pt(212,116),toe:pt(224,112)}},
-  a5:{A:{elL:pt(146,106),wrL:pt(142,128),elR:pt(194,106),wrR:pt(198,128)},
-      B:{elL:pt(126,84),wrL:pt(104,88),elR:pt(214,84),wrR:pt(236,88)}},
-  a6:{A:{hip:pt(132,128),sh:pt(122,72),tc:pt(120,100),head:pt(128,52),el:pt(138,92),wr:pt(152,102),knee:pt(176,130),an:pt(180,188),toe:pt(194,192)},
-      B:{sh:pt(142,92),tc:pt(126,106),head:pt(154,78),el:pt(154,110),wr:pt(166,118)}},
-  b1:{A:{hip:pt(120,150),sh:pt(85,120),head:pt(72,103),el:pt(100,138),wr:pt(112,150),knee:pt(122,106),an:pt(160,120),toe:pt(167,129)},
-      B:{knee:pt(155,124),an:pt(187,100),toe:pt(194,109)}},
-  b2u:{A:{hip:pt(130,145),sh:pt(112,92),head:pt(115,70),el:pt(104,118),wr:pt(134,96),knee:pt(174,145),an:pt(178,190),toe:pt(192,194)},
-      B:{sh:pt(114,92),head:pt(118,70),el:pt(135,78),wr:pt(166,58)}},
-  b3:{A:{hip:pt(120,135),sh:pt(112,78),head:pt(117,57),el:pt(140,95),wr:pt(175,100),knee:pt(165,122),an:pt(197,140),toe:pt(206,131)},
-      B:{el:pt(92,102),wr:pt(126,106)}},
-  b4:{A:{hip:pt(150,135),sh:pt(158,78),head:pt(151,56),el:pt(128,85),wr:pt(102,88),knee:pt(156,160),an:pt(152,190),toe:pt(140,193)},
-      B:{el:pt(186,88),wr:pt(210,95)}},
-  b5:{A:{hip:pt(120,140),sh:pt(118,90),head:pt(122,68),el:pt(146,112),wr:pt(176,129),knee:pt(160,145),an:pt(165,190),toe:pt(179,194)},
-      B:{wr:pt(155,79)}},
-  c1:{A:{hip:pt(130,140),sh:pt(122,88),head:pt(127,60),el:pt(138,106),wr:pt(140,74),knee:pt(174,140),an:pt(178,188),toe:pt(192,192)},
-      B:{el:pt(127,64),wr:pt(133,33)}},
-  c2:{A:{hip:pt(125,118),sh:pt(166,71),head:pt(176,55),el:pt(155,90),wr:pt(163,76),knee:pt(92,146),an:pt(120,183),toe:pt(103,187)},
-      B:{hip:pt(145,98),sh:pt(186,51),head:pt(196,36),el:pt(175,70),wr:pt(183,56),knee:pt(133,139)}},
-  c3:{A:{hip:pt(115,135),sh:pt(108,80),head:pt(113,58),el:pt(138,94),wr:pt(174,92),knee:pt(158,128),an:pt(178,188),toe:pt(192,192)},
-      B:{el:pt(82,100),wr:pt(118,106)}},
-  c4:{A:{elL:pt(124,72),wrL:pt(104,54),elR:pt(216,72),wrR:pt(236,54)},
-      B:{elL:pt(132,96),wrL:pt(152,74),elR:pt(208,96),wrR:pt(188,74)}},
-  c5:{A:{hip:pt(114,140),sh:pt(112,85),head:pt(117,63),el:pt(122,110),wr:pt(140,83),knee:pt(158,145),an:pt(163,190),toe:pt(177,194)},
-      B:{wr:pt(145,132)}},
-};
-
+/* Her çizer 0..1 fazını alır, SVG içeriği döner. viewBox: 0 0 200 140 */
 const DRAW = {
 
-  /* a1 Chest Press — dirsek geride bukulu baslar, omuz hizasinda duz ileri iter */
+  /* Chest Press — oturur, yatay itiş */
   a1(t){
-    const o = mixP(POSE.a1.A, POSE.a1.B, t), pv = pt(212,152);
-    return GROUND
-      + P("M85 195 L85 135 Q85 128 92 128 L118 128",6,MACH) + R(78,58,12,76,MACH,6)
-      + R(92,128,54,12,MACH,6) + L(118,140,118,195,6,MACH)
-      + L(212,195,212,152,5,FRM) + C(212,152,5,FRM)
-      + SEG(pv, pt(o.wr.x+2,o.wr.y+4), 4, FRM) + PLATE(MIDF(pv,o.wr,0.6))
-      + figSide(o) + GRIP(o.wr,11);
+    const hx=lerp(96,132,t);
+    return R(56,34,10,74,MACH,3)+R(50,104,58,7,MACH,2)
+      + P(`M96 62 L132 62`,2,ACC,"4 4")
+      + L(78,72,78,96,6)                       // gövde
+      + C(78,60,9)                             // baş
+      + L(78,96,96,104,5)+L(96,104,96,118,5)   // bacak
+      + L(78,74,hx-6,68,5)                     // üst kol
+      + L(hx-6,68,hx,72,5)                     // ön kol
+      + R(hx,58,7,26,ACC,3)                    // tutamak
+      + P(`M132 62 l7 -4 l0 8 z`,0,ACC).replace('stroke-width="0"','fill="var(--accent)" stroke="none"');
   },
 
-  /* a2 Seated Leg Curl — bacak uzatilmis baslar, topuk asagi-geriye kivrilir */
+  /* Seated Leg Curl — oturur, diz bükme */
   a2(t){
-    const o = mixP(POSE.a2.A, POSE.a2.B, t), pv = pt(168,132), pp = pt(o.an.x+5,o.an.y+3);
-    return GROUND
-      + R(84,60,12,62,MACH,6) + R(90,118,90,12,MACH,6)
-      + L(100,130,100,195,6,MACH) + L(168,130,168,195,6,MACH) + C(168,132,4.5,FRM)
-      + SEG(pv,pp,4,FRM) + PLATE(MIDF(pv,o.an,1.3)) + C(pp.x,pp.y,7,PADC)
-      + figSide(o);
+    const a=lerp(-8,52,t)*Math.PI/180;
+    const kx=104,ky=88, ax=kx+34*Math.cos(a), ay=ky+34*Math.sin(a);
+    return R(56,40,10,60,MACH,3)+R(52,98,56,7,MACH,2)
+      + P(`M138 84 A34 34 0 0 1 ${(kx+34*Math.cos(52*Math.PI/180)).toFixed(1)} ${(ky+34*Math.sin(52*Math.PI/180)).toFixed(1)}`,2,ACC,"4 4")
+      + L(80,66,80,92,6)+C(80,54,9)
+      + L(80,92,kx,ky,6)                       // uyluk
+      + L(kx,ky,ax,ay,5)                       // baldır
+      + C(kx,ky,3.5,MACH)
+      + R(ax-5,ay-4,12,8,ACC,3);               // ayak yastığı
   },
 
-  /* a3 Lat Pulldown — bar yukaridan gogus ustune iner, dirsek yana-asagi */
+  /* Lat Pulldown — yukarıdan aşağı çekiş */
   a3(t){
-    const o = mixP(POSE.a3.A, POSE.a3.B, t), pv = pt(232,22);
-    return GROUND
-      + L(246,24,246,195,10,MACH) + L(246,26,232,22,3,FRM) + C(232,22,5,FRM)
-      + SEG(pv, pt(o.wr.x,o.wr.y-3), 4, FRM) + PLATE(MIDF(pv,o.wr,0.35))
-      + R(118,130,66,10,MACH,5) + L(130,140,130,195,6,MACH) + R(152,110,42,9,MACH,4.5)
-      + figSide(o)
-      + L(o.wr.x-16,o.wr.y,o.wr.x+8,o.wr.y,6,PADC);
+    const by=lerp(34,66,t);
+    return R(30,18,140,6,MACH,2)+R(96,24,4,by-24,MACH,1)
+      + P(`M100 40 L100 70`,2,ACC,"4 4")
+      + R(74,by,52,6,ACC,3)                    // bar
+      + L(100,86,100,110,6)+C(100,74,9)
+      + L(100,110,88,124,5)+L(100,110,112,124,5)
+      + L(100,88,86,by+8,5)+L(86,by+8,80,by+3,5)
+      + L(100,88,114,by+8,5)+L(114,by+8,120,by+3,5);
   },
 
-  /* a4 Leg Extension — diz bukulu baslar, bacak yatay hizaya uzar */
+  /* Leg Extension — oturur, diz uzatma */
   a4(t){
-    const o = mixP(POSE.a4.A, POSE.a4.B, t), pv = pt(165,127), pp = pt(o.an.x+5,o.an.y+2);
-    return GROUND
-      + R(80,55,12,66,MACH,6) + R(88,115,82,12,MACH,6)
-      + L(98,127,98,195,6,MACH) + L(162,127,162,195,6,MACH) + C(165,127,4.5,FRM)
-      + SEG(pv,pp,4,FRM) + PLATE(MIDF(pv,o.an,1.3)) + C(pp.x,pp.y,7,PADC)
-      + figSide(o);
+    const a=lerp(74,4,t)*Math.PI/180;
+    const kx=106,ky=80, ax=kx+34*Math.cos(a), ay=ky+34*Math.sin(a);
+    return R(58,36,10,58,MACH,3)+R(54,92,56,7,MACH,2)
+      + P(`M${(kx+34*Math.cos(74*Math.PI/180)).toFixed(1)} ${(ky+34*Math.sin(74*Math.PI/180)).toFixed(1)} A34 34 0 0 0 140 82`,2,ACC,"4 4")
+      + L(82,60,82,86,6)+C(82,48,9)
+      + L(82,86,kx,ky,6)
+      + L(kx,ky,ax,ay,5)
+      + C(kx,ky,3.5,MACH)
+      + R(ax-5,ay-5,12,9,ACC,3);
   },
 
-  /* a5 Machine Lateral Raise — onden gorunum, dirsek pedleri omuz hizasina kalkar */
+  /* Machine Lateral Raise — yanlara açış */
   a5(t){
-    const o = mixP(POSE.a5.A, POSE.a5.B, t), shL = pt(156,78), shR = pt(184,78);
-    return L(60,195,280,195,2,FRM)
-      + R(162,150,16,45,MACH,4) + R(138,140,64,12,MACH,6)
-      + C(151,66,4,FRM) + C(189,66,4,FRM)
-      + SEG(pt(151,66),o.elL,3.5,FRM) + SEG(pt(189,66),o.elR,3.5,FRM)
-      + figFront(o, shL, shR)
-      + R(o.elL.x-7,o.elL.y-10,14,20,PADC,5) + R(o.elR.x-7,o.elR.y-10,14,20,PADC,5);
+    // t=0 kollar aşağıda, t=1 omuz hizasında
+    const a=lerp(80,4,t)*Math.PI/180;               // dikeyden sapma
+    const sx=100,sy=68, r=32;
+    const ex=sx+r*Math.sin(a===0?0:a)*0;            // placeholder
+    const dx=r*Math.cos(a), dy=r*Math.sin(a);       // a=80 -> aşağı; a=4 -> yana
+    const rx=sx+dy, ry=sy+dx;                       // sağ el
+    const lx=sx-dy, ly=sy+dx;                       // sol el
+    return R(86,84,28,30,MACH,3)+R(82,110,36,6,MACH,2)
+      + P(`M${(sx+r*Math.sin(80*Math.PI/180)).toFixed(1)} ${(sy+r*Math.cos(80*Math.PI/180)).toFixed(1)} A${r} ${r} 0 0 0 ${(sx+r*Math.sin(4*Math.PI/180)).toFixed(1)} ${(sy+r*Math.cos(4*Math.PI/180)).toFixed(1)}`,2,ACC,"4 4")
+      + C(100,50,9)+L(100,60,100,88,6)
+      + L(sx,sy,rx,ry,5)+R(rx-5,ry-4,12,8,ACC,3)
+      + L(sx,sy,lx,ly,5)+R(lx-7,ly-4,12,8,ACC,3);
   },
 
-  /* a6 Ab Crunch — govde one kivrilir, ped gogusle birlikte doner */
+  /* Ab Crunch Machine — gövde kıvırma */
   a6(t){
-    const o = mixP(POSE.a6.A, POSE.a6.B, t), pv = pt(92,96), pp = pt(o.sh.x+12,o.sh.y+10);
-    return GROUND
-      + R(100,128,66,12,MACH,6) + L(110,140,110,195,6,MACH) + L(156,140,156,195,6,MACH)
-      + L(92,195,92,98,5,FRM) + C(92,96,5,FRM)
-      + SEG(pv,pp,4,FRM) + PLATE(MIDF(pv,pp,0.4))
-      + figSide(o) + R(pp.x-7,pp.y-10,14,20,PADC,5);
+    const a=lerp(-8,30,t)*Math.PI/180;
+    const hx=96,hy=98, tx=hx-40*Math.sin(a), ty=hy-40*Math.cos(a);
+    return R(60,44,10,58,MACH,3)+R(56,100,56,7,MACH,2)
+      + P(`M${(hx-40*Math.sin(-8*Math.PI/180)).toFixed(1)} ${(hy-40*Math.cos(-8*Math.PI/180)).toFixed(1)} A40 40 0 0 1 ${(hx-40*Math.sin(30*Math.PI/180)).toFixed(1)} ${(hy-40*Math.cos(30*Math.PI/180)).toFixed(1)}`,2,ACC,"4 4")
+      + L(hx,hy,tx,ty,6)
+      + C(tx-3*Math.sin(a),ty-11*Math.cos(a),9)
+      + L(hx,hy,120,110,5)
+      + R(tx-14,ty+4,10,16,ACC,3);
   },
 
-  /* b1 Leg Press — 45 derece kizak, platform ayakla birlikte kayar */
+  /* Leg Press — 45 derece bacak itiş */
   b1(t){
-    const o = mixP(POSE.b1.A, POSE.b1.B, t), f = o.an;
-    return GROUND
-      + L(100,172,238,68,2.5,FRM) + L(110,184,248,80,2.5,FRM)
-      + L(135,162,66,102,12,MACH) + L(70,195,70,130,6,MACH) + L(135,195,135,168,6,MACH)
-      + L(f.x-9,f.y-12,f.x+9,f.y+12,7,FRM) + PLATE(pt(f.x+13,f.y-10))
-      + figSide(o);
+    // sırt desteği sabit; ayaklar platformu yukarı-sağa iter
+    const hip=[74,96];
+    const kx=lerp(96,112,t), ky=lerp(66,52,t);      // diz
+    const fx=lerp(120,152,t), fy=lerp(46,22,t);     // ayak
+    return R(34,92,58,8,MACH,3)                      // koltuk
+      + R(30,66,10,30,MACH,3)                        // sırt desteği
+      + `<line x1="128" y1="60" x2="164" y2="24" stroke="${MACH}" stroke-width="3"/>`
+      + P(`M126 44 L156 18`,2,ACC,"4 4")
+      + C(56,80,9)                                   // baş
+      + L(64,86,hip[0],hip[1],6)                     // gövde
+      + L(hip[0],hip[1],kx,ky,6)                     // uyluk
+      + L(kx,ky,fx,fy,5)                             // baldır
+      + C(kx,ky,3.5,MACH)
+      + `<g transform="rotate(-40 ${fx.toFixed(1)} ${fy.toFixed(1)})">`
+        + R(fx-4,fy-13,9,26,ACC,3) + `</g>`;         // platform
   },
 
-  /* b2u Ust Gogus Makinesi — egik sirtlik, itis yukari-ileri capraz */
-  b2u(t){
-    const o = mixP(POSE.b2u.A, POSE.b2u.B, t), pv = pt(205,160);
-    return GROUND
-      + L(128,150,96,86,12,MACH) + R(100,145,52,12,MACH,6) + L(112,157,112,195,6,MACH)
-      + L(205,195,205,160,5,FRM) + C(205,160,5,FRM)
-      + SEG(pv, pt(o.wr.x+2,o.wr.y+4), 4, FRM) + PLATE(MIDF(pv,o.wr,0.55))
-      + figSide(o) + GRIP(o.wr,11);
+  /* Dumbbell Bench Press — yatarak itiş */
+  b2(t){
+    const hy=lerp(74,42,t);
+    return R(52,88,100,8,MACH,3)+R(70,96,7,18,MACH,2)+R(128,96,7,18,MACH,2)
+      + P(`M100 66 L100 40`,2,ACC,"4 4")
+      + C(62,80,9)+L(74,84,120,84,6)
+      + L(120,84,140,96,5)
+      + L(86,82,92,hy+8,5)+L(92,hy+8,98,hy,5)
+      + L(104,82,110,hy+8,5)+L(110,hy+8,104,hy,5)
+      + R(84,hy-5,18,7,ACC,3)+R(100,hy-5,18,7,ACC,3);
   },
 
-  /* b3 Seated Row — kollar uzatilmis baslar, dirsek govde gerisine cekilir */
+  /* Seated Cable Row — oturarak çekiş */
   b3(t){
-    const o = mixP(POSE.b3.A, POSE.b3.B, t), pv = pt(215,178);
-    return GROUND
-      + R(100,135,50,12,MACH,6) + L(112,147,112,195,6,MACH)
-      + L(204,128,212,158,8,MACH)
-      + L(215,195,215,178,5,FRM) + C(215,178,5,FRM)
-      + SEG(pv, pt(o.wr.x+3,o.wr.y-2), 4, FRM) + PLATE(MIDF(pv,o.wr,0.3))
-      + figSide(o) + GRIP(o.wr,10);
+    const hx=lerp(146,104,t);
+    return R(44,96,86,7,MACH,2)+R(150,44,8,58,MACH,3)
+      + P(`M150 76 L${hx.toFixed(1)} 76`,2,ACC,"4 4")
+      + `<line x1="${hx}" y1="76" x2="150" y2="76" stroke="${MACH}" stroke-width="2"/>`
+      + C(74,58,9)+L(74,70,74,92,6)
+      + L(74,92,110,96,6)+L(110,96,116,84,5)
+      + L(76,74,hx-10,78,5)+L(hx-10,78,hx,76,5)
+      + R(hx,70,7,14,ACC,3);
   },
 
-  /* b4 Reverse Pec Deck — gogus pede dayali, kollar onden geriye supurur */
+  /* Reverse Pec Deck — geriye açış */
   b4(t){
-    const o = mixP(POSE.b4.A, POSE.b4.B, t), pv = pt(168,32);
-    return GROUND
-      + L(100,28,245,28,2.5,FRM) + L(240,28,240,195,2.5,FRM) + C(168,32,5,FRM)
-      + R(136,70,9,52,MACH,4.5) + R(118,128,64,12,MACH,6) + L(150,140,150,195,6,MACH)
-      + SEG(pv, pt(o.wr.x,o.wr.y-3), 4, FRM) + PLATE(MIDF(pv,o.wr,0.35))
-      + figSide(o);
+    const a=lerp(24,-44,t)*Math.PI/180;
+    const sx=100,sy=72, ex=sx+34*Math.cos(a), ey=sy+34*Math.sin(a);
+    const ex2=sx-34*Math.cos(a);
+    return R(88,82,24,30,MACH,3)+R(84,58,32,6,MACH,2)
+      + P(`M${(sx+34*Math.cos(24*Math.PI/180)).toFixed(1)} ${(sy+34*Math.sin(24*Math.PI/180)).toFixed(1)} A34 34 0 0 0 ${(sx+34*Math.cos(-44*Math.PI/180)).toFixed(1)} ${(sy+34*Math.sin(-44*Math.PI/180)).toFixed(1)}`,2,ACC,"4 4")
+      + C(100,46,9)+L(100,56,100,86,6)
+      + L(sx,sy,ex,ey,5)+R(ex-4,ey-5,9,11,ACC,3)
+      + L(sx,sy,ex2,ey,5)+R(ex2-5,ey-5,9,11,ACC,3);
   },
 
-  /* b5 Biceps Curl — pinli makine, ust kol pedde sabit, on kol yukari kivrilir */
+  /* Seated Dumbbell Curl — biceps */
   b5(t){
-    const o = mixP(POSE.b5.A, POSE.b5.B, t);
-    return GROUND + pinStack(t)
-      + R(96,60,12,70,MACH,6) + R(100,126,54,12,MACH,6) + L(122,138,122,195,6,MACH)
-      + L(118,96,152,120,10,MACH)
-      + SEG(o.el,o.wr,4,FRM)
-      + figSide(o) + GRIP(o.wr,9);
+    const a=lerp(88,16,t)*Math.PI/180;
+    const ex=94,ey=84, hx=ex+30*Math.cos(a-Math.PI/2), hy=ey+30*Math.sin(a-Math.PI/2);
+    return R(58,42,10,54,MACH,3)+R(54,94,56,7,MACH,2)
+      + P(`M${(ex+30*Math.cos(88*Math.PI/180-Math.PI/2)).toFixed(1)} ${(ey+30*Math.sin(88*Math.PI/180-Math.PI/2)).toFixed(1)} A30 30 0 0 1 ${(ex+30*Math.cos(16*Math.PI/180-Math.PI/2)).toFixed(1)} ${(ey+30*Math.sin(16*Math.PI/180-Math.PI/2)).toFixed(1)}`,2,ACC,"4 4")
+      + C(82,50,9)+L(82,62,82,88,6)+L(82,88,112,94,6)
+      + L(82,66,ex,ey,5)
+      + L(ex,ey,hx,hy,5)
+      + R(hx-9,hy-4,20,7,ACC,3);
   },
 
-  /* c1 Shoulder Press — eller omuz ustunde baslar, tepede dik itis */
+  /* Leg Raises — yatarak bacak kaldırma */
+  b6(t){
+    const a=lerp(4,80,t)*Math.PI/180;
+    const hx=104,hy=92, fx=hx+40*Math.cos(-a), fy=hy+40*Math.sin(-a);
+    return R(40,100,124,5,MACH,2)
+      + P(`M144 88 A40 40 0 0 0 ${(hx+40*Math.cos(-80*Math.PI/180)).toFixed(1)} ${(hy+40*Math.sin(-80*Math.PI/180)).toFixed(1)}`,2,ACC,"4 4")
+      + C(58,86,9)+L(70,92,hx,92,6)
+      + L(hx,hy,fx,fy,6)
+      + C(hx,hy,3.5,MACH)
+      + L(70,92,62,72,5);
+  },
+
+  /* Shoulder Press Machine — yukarı itiş */
   c1(t){
-    const o = mixP(POSE.c1.A, POSE.c1.B, t), pv = pt(198,118);
-    return GROUND
-      + R(94,66,12,76,MACH,6) + R(106,138,52,12,MACH,6) + L(120,150,120,195,6,MACH)
-      + L(198,195,198,120,5,FRM) + C(198,118,5,FRM)
-      + SEG(pv, pt(o.wr.x+2,o.wr.y+2), 4, FRM) + PLATE(MIDF(pv,o.wr,0.5))
-      + figSide(o) + GRIP(o.wr,10);
+    const hy=lerp(66,30,t);
+    return R(58,40,10,66,MACH,3)+R(54,104,56,7,MACH,2)
+      + P(`M118 58 L118 32`,2,ACC,"4 4")
+      + C(84,54,9)+L(84,66,84,94,6)+L(84,94,108,102,5)
+      + L(86,70,102,hy+10,5)+L(102,hy+10,110,hy,5)
+      + R(106,hy-4,8,20,ACC,3);
   },
 
-  /* c2 Hack Squat — ayaklar sabit, sirt pedi ve plakalar figurle 45 derece iner-kalkar */
+  /* Hack Squat — eğimli çömelme */
   c2(t){
-    const o = mixP(POSE.c2.A, POSE.c2.B, t);
-    return GROUND
-      + L(70,188,235,32,2.5,FRM) + L(84,196,248,42,2.5,FRM)
-      + L(96,196,142,176,8,MACH)
-      + L(o.hip.x+10,o.hip.y+9,o.sh.x+10,o.sh.y+9,10,MACH) + PLATE(pt(o.sh.x+21,o.sh.y+5))
-      + figSide(o);
+    // t=0 üstte (ayakta), t=1 altta (çömelmiş)
+    const sh=[lerp(86,74,t), lerp(44,70,t)];        // omuz
+    const hip=[lerp(88,78,t), lerp(74,96,t)];       // kalça
+    const kn=[lerp(96,112,t), lerp(96,98,t)];       // diz
+    const ft=[100,116];                              // ayak sabit
+    return `<line x1="60" y1="18" x2="60" y2="112" stroke="${MACH}" stroke-width="4"/>`
+      + R(56,110,60,7,MACH,2)
+      + P(`M74 40 L64 68`,2,ACC,"4 4")
+      + R(sh[0]-22,sh[1]-12,32,8,ACC,3)              // omuz pedi
+      + C(sh[0]-2,sh[1]-13,9)
+      + L(sh[0],sh[1],hip[0],hip[1],6)
+      + L(hip[0],hip[1],kn[0],kn[1],6)
+      + L(kn[0],kn[1],ft[0],ft[1],5)
+      + C(kn[0],kn[1],3.5,MACH);
   },
 
-  /* c3 Machine Row — gogus destekli, dirsek geriye, eller pedin altina ceker */
+  /* Machine Row — makinede çekiş */
   c3(t){
-    const o = mixP(POSE.c3.A, POSE.c3.B, t), pv = pt(215,172);
-    return GROUND
-      + R(96,130,52,12,MACH,6) + L(110,142,110,195,6,MACH)
-      + R(124,66,9,34,MACH,4.5) + L(128,100,128,130,5,MACH)
-      + L(215,195,215,172,5,FRM) + C(215,172,5,FRM)
-      + SEG(pv, pt(o.wr.x+3,o.wr.y-2), 4, FRM) + PLATE(MIDF(pv,o.wr,0.3))
-      + figSide(o) + GRIP(o.wr,10);
+    const hx=lerp(140,108,t);
+    return R(84,72,26,40,MACH,3)+R(146,40,9,62,MACH,3)
+      + P(`M142 70 L${hx.toFixed(1)} 70`,2,ACC,"4 4")
+      + C(96,46,9)+L(96,56,96,80,6)
+      + L(98,66,hx-10,72,5)+L(hx-10,72,hx,70,5)
+      + R(hx,62,7,16,ACC,3);
   },
 
-  /* c4 Pec Deck — onden gorunum, acik kollar merkezde one kapanir */
+  /* Pec Deck — göğüs kapatma */
   c4(t){
-    const o = mixP(POSE.c4.A, POSE.c4.B, t), shL = pt(154,80), shR = pt(186,80);
-    const mL = MIDF(o.elL,o.wrL,0.5), mR = MIDF(o.elR,o.wrR,0.5);
-    return L(60,195,280,195,2,FRM)
-      + R(162,150,16,45,MACH,4) + R(138,140,64,12,MACH,6)
-      + C(148,60,4,FRM) + C(192,60,4,FRM)
-      + SEG(pt(148,60),o.elL,3.5,FRM) + SEG(pt(192,60),o.elR,3.5,FRM)
-      + figFront(o, shL, shR)
-      + R(mL.x-7,mL.y-12,14,24,PADC,5) + R(mR.x-7,mR.y-12,14,24,PADC,5);
+    // t=0 kollar açık, t=1 önde birleşik
+    const a=lerp(64,8,t)*Math.PI/180;
+    const sx=100,sy=68, r=34;
+    const dx=r*Math.sin(a), dy=r*Math.cos(a);
+    const rx=sx+dx, ry=sy+ (34-dy)*0.35 + 6;
+    const lx=sx-dx, ly=ry;
+    return R(88,80,24,32,MACH,3)+R(84,110,32,6,MACH,2)
+      + P(`M${(sx+r*Math.sin(64*Math.PI/180)).toFixed(1)} ${(sy+(34-r*Math.cos(64*Math.PI/180))*0.35+6).toFixed(1)} A${r} ${r} 0 0 1 ${(sx+r*Math.sin(8*Math.PI/180)).toFixed(1)} ${(sy+(34-r*Math.cos(8*Math.PI/180))*0.35+6).toFixed(1)}`,2,ACC,"4 4")
+      + C(100,48,9)+L(100,58,100,86,6)
+      + L(sx,sy,rx,ry,5)+R(rx-4,ry-7,9,14,ACC,3)
+      + L(sx,sy,lx,ly,5)+R(lx-5,ly-7,9,14,ACC,3);
   },
 
-  /* c5 Triceps Makinesi — pinli, dirsek yanda sabit, on kol asagi iter */
+  /* Cable Pushdown — triceps itiş */
   c5(t){
-    const o = mixP(POSE.c5.A, POSE.c5.B, t);
-    return GROUND + pinStack(t)
-      + R(88,60,12,70,MACH,6) + R(94,126,54,12,MACH,6) + L(116,138,116,195,6,MACH)
-      + C(160,66,5,FRM) + L(160,66,160,40,4,FRM)
-      + SEG(pt(160,66),o.wr,4,FRM)
-      + figSide(o) + GRIP(o.wr,9);
+    const a=lerp(-72,4,t)*Math.PI/180;               // ön kol açısı, yukarıdan aşağı
+    const ex=94,ey=76;                               // dirsek gövdeye sabit
+    const hx=ex+30*Math.sin(a*0+0)+30*Math.cos(a+Math.PI/2)*0;
+    const wx=ex+30*Math.cos(a+Math.PI/2)*0 + 30*Math.sin(a+Math.PI/2)*0;
+    const px=ex+30*Math.cos(a-Math.PI/2+Math.PI), py=ey+30*Math.sin(a-Math.PI/2+Math.PI);
+    const fx=ex-30*Math.sin(a), fy=ey+30*Math.cos(a);
+    return R(34,16,132,6,MACH,2)+R(96,22,4,26,MACH,1)
+      + `<line x1="98" y1="48" x2="${fx.toFixed(1)}" y2="${fy.toFixed(1)}" stroke="${MACH}" stroke-width="2"/>`
+      + P(`M84 48 A30 30 0 0 0 ${fx.toFixed(1)} ${fy.toFixed(1)}`,2,ACC,"4 4")
+      + C(84,52,9)+L(84,62,84,96,6)
+      + L(84,96,76,116,5)+L(84,96,94,116,5)
+      + L(86,66,ex,ey,5)                             // üst kol
+      + L(ex,ey,fx,fy,5)                             // ön kol
+      + C(ex,ey,3.5,MACH)
+      + R(fx-12,fy-3,26,7,ACC,3);                    // bar
+  },
+
+  /* Plank — statik, hafif nefes salınımı */
+  c6(t){
+    const s=Math.sin(t*Math.PI*2)*1.5;
+    const sh=[64,66+s], hip=[112,80+s], ft=[156,100];
+    return R(24,104,152,5,MACH,2)
+      + P(`M60 62 L152 96`,2,ACC,"5 4")
+      + C(52,62+s,9)                                  // baş
+      + L(sh[0],sh[1],hip[0],hip[1],6)                // gövde
+      + L(hip[0],hip[1],ft[0],ft[1],6)                // bacak
+      + L(sh[0],sh[1],58,100,5)                       // üst kol (dikey)
+      + L(58,100,80,102,5)                            // ön kol (yerde)
+      + L(ft[0],ft[1],162,104,4);                     // ayak
   },
 };
+DRAW.b2u = DRAW.b2;   // Üst Göğüs Makinesi — aynı itiş animasyonu, farklı hareket ID'si
 
 /* Bir hareketin animasyon SVG'sini üret (frame dizisi + CSS ile döngü) */
 function exerciseSVG(exId, frames){
   const draw = DRAW[exId];
   if(!draw) return "";
-  const N = frames || 26;
+  const N = frames || 14;
   let out = "";
   for(let i=0;i<N;i++){
-    /* Gercek tempo: kasilma hizli (0-30%), tepede kisa bekleme (30-42%),
-       eksantrik kontrollu-yavas (42-94%), altta kisa dinlenme (94-100%). */
-    const phase = i/N;
-    let raw;
-    if(phase < 0.30)      raw = phase/0.30;
-    else if(phase < 0.42) raw = 1;
-    else if(phase < 0.94) raw = 1-(phase-0.42)/0.52;
-    else                  raw = 0;
-    const eased = (1-Math.cos(Math.PI*raw))/2;   // cosine easing
-    out += `<g class="fr" style="animation-delay:${(i*(2.6/N)).toFixed(3)}s">${draw(eased)}</g>`;
+    // ileri-geri: 0->1->0 (eksantrik dahil)
+    const phase = i/(N-1);
+    const t = phase<=0.5 ? phase*2 : (1-phase)*2;
+    const eased = t*t*(3-2*t);   // smoothstep
+    out += `<g class="fr" style="animation-delay:${(i*(1.8/N)).toFixed(3)}s">${draw(eased)}</g>`;
   }
-  return `<svg class="exanim" viewBox="0 0 340 210" style="--frames:${N}">${out}</svg>`;
+  return `<svg class="exanim" viewBox="0 0 200 140" style="--frames:${N}">${out}</svg>`;
 }
 
 /* =========================================================
@@ -913,6 +892,7 @@ const RPE_LABELS = {
    ========================================================= */
 const KEY = "antrenman_v1";
 const blank = () => ({
+  lang: "tr",
   bodyweight: 134,
   weights: {},
   incs: {},
@@ -956,7 +936,7 @@ function save(){
   }
   catch(e){
     storageOK = false;
-    alert("Veri kaydedilemedi.\n\nTarayıcı bu sayfada depolamaya izin vermiyor. Dosyayı bilgisayardan açtıysan (adres çubuğunda file:// yazıyorsa) bu normaldir — GitHub Pages adresinden aç.");
+    alert(T("Veri kaydedilemedi.\n\nTarayıcı bu sayfada depolamaya izin vermiyor. Dosyayı bilgisayardan açtıysan (adres çubuğunda file:// yazıyorsa) bu normaldir — GitHub Pages adresinden aç."));
     return false;
   }
 }
@@ -1204,7 +1184,7 @@ function plateCounts(list){
 
 function plateListText(perSide){
   const r = platesFor(perSide);
-  if(!r.plates.length) return "boş";
+  if(!r.plates.length) return T("boş");
   const c = plateCounts(r.plates);
   return Object.keys(c).map(Number).sort((a,b)=>b-a)
     .map(p => c[p]>1 ? c[p]+"×"+fmtP(p) : fmtP(p)).join("+");
@@ -1320,8 +1300,8 @@ function plateCard(ex, kg){
   if(ref != null && Math.abs(ref-per) > 0.01){
     const d = plateDiff(ref, per);
     const parts = [];
-    if(d.add.length) parts.push("ekle "+d.add.join(" + "));
-    if(d.rem.length) parts.push("çıkar "+d.rem.join(" + "));
+    if(d.add.length) parts.push(T("ekle ")+d.add.join(" + "));
+    if(d.rem.length) parts.push(T("çıkar ")+d.rem.join(" + "));
     if(parts.length) delta = `<div class="delta ${per>ref?'up':'dn'}">${per>ref?'▲':'▼'} ${refLbl}, her tarafa ${parts.join(" · ")}</div>`;
   }
 
@@ -1384,13 +1364,14 @@ function greet(){
   const h = new Date().getHours();
   return h<6?"İyi Geceler":h<12?"Günaydın":h<18?"İyi Günler":"İyi Akşamlar";
 }
-function trDate(d){ return new Date(d).toLocaleDateString("tr-TR",{day:"numeric",month:"short"}); }
-function trDateLong(d){ return new Date(d).toLocaleDateString("tr-TR",{day:"numeric",month:"long"}); }
+function loc(){ return LOCALE[S.lang] || "tr-TR"; }
+function trDate(d){ return new Date(d).toLocaleDateString(loc(),{day:"numeric",month:"short"}); }
+function trDateLong(d){ return new Date(d).toLocaleDateString(loc(),{day:"numeric",month:"long"}); }
 function daysAgo(d){
   const diff = Math.floor((Date.now() - new Date(d).getTime())/(86400000));
-  if(diff === 0) return "Bugün";
-  if(diff === 1) return "Dün";
-  return diff + " gün önce";
+  if(diff === 0) return T("Bugün");
+  if(diff === 1) return T("Dün");
+  return diff + T(" gün önce");
 }
 
 /* Readiness score 0-100 from latest readiness entry today */
@@ -1423,7 +1404,6 @@ let progressTab = "genel";      // genel | egzersizler | vucut | performans
 let historyOpen = null;         // session index expanded
 let progressExId = null;        // selected exercise in progress
 let progressRange = "3ay";      // 3ay | 6ay | 1yil | tumu
-let progressMetric = null;      // null=otomatik | agirlik | e1rm | hacim
 let hiddenSeries = {};          // {exId:true} -> hidden on the all-lifts chart
 const LINE_COLORS = ["#F5A623","#4ADE80","#60A5FA","#F472B6","#A78BFA","#FBBF24",
   "#34D399","#FB923C","#22D3EE","#E879F9","#FACC15","#38BDF8","#F87171","#2DD4BF",
@@ -1443,6 +1423,383 @@ const $rest = document.getElementById("rest");
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fmtKg = v => (v == null ? "—" : (Math.round(v*100)/100).toString());
 
+/* =========================================================
+   DİL / LANGUAGE / KIELI
+   Anahtar = Türkçe kaynak metin. Karşılığı yoksa Türkçe'ye düşer,
+   yani yarım çeviri ekranı bozmaz. Türkçe seçiliyken hiç iş yapılmaz.
+   ========================================================= */
+const LANGS = { tr:"Türkçe", en:"English", fi:"Suomi" };
+const LOCALE = { tr:"tr-TR", en:"en-GB", fi:"fi-FI" };
+
+const TRS = {
+en:{
+/* --- ek metinler --- */
+"Tarih":"Date","Sil":"Delete","Geçmiş bir tarih seçtin — bu kayıt grafiğe eklenir, güncel kilon değişmez.":"You picked a past date — this entry is added to the chart, your current weight is unchanged.",
+
+"set":"sets","egzersiz":"exercises","devam":"to go","tamamlandı":"done","kalan":"left",
+
+"Ağırlık: bir sonraki antrenmanda kullanacağın kilo. Artış: hedefi tutturduğunda eklenecek kilo. Kademe alanı sadece pinli makinelerde (Biceps, Triceps) görünür — o makinede gerçekten seçilebilen en küçük adım. Kademe, ağırlığın %10'undan büyükse hareket kaba kademe moduna geçer: ağırlık her antrenman artmaz, önce tekrarlar tavana çıkar, sonra tek seferde bir kademe atlanır. Plakalı makineler bu moda hiç girmez.":"Weight: the load you'll use in your next workout. Increment: the load added when you hit the target. The step field only appears on pin-loaded machines (Biceps, Triceps) — the smallest jump that machine actually offers. If the step is larger than 10% of the weight, the exercise switches to coarse-step mode: the weight doesn't rise every workout; reps climb to the top of the range first, then one step is taken in a single jump. Plate-loaded machines never enter this mode.",
+"Mola zili: süre bitince ses çalar. Açıkken mola boyunca çok kısık bir ses çalar — bu olmadan iPhone sayfayı dondurur ve zil hiç çalmaz. Podcast veya müziğini duraklatabilir, telefon sessiz moddayken de duyulmaz. Sayaç, zil kapalıyken de doğru çalışır.":"Rest bell: a sound plays when the timer ends. While it's on, a very quiet tone plays throughout the rest — without it the iPhone freezes the page and the bell never rings. It may pause your podcast or music, and it won't be heard when the phone is on silent. The timer works correctly with the bell off too.",
+"Salonunda bulunan plakaları seç. Hareket ekranındaki hesap bunlara göre yapılır. Tek taraf / toplam ayarını her hareketin kendi ekranından değiştirebilirsin.":"Pick the plates your gym has. The calculation on the exercise screen is based on these. You can change the per-side / total setting from each exercise's own screen.",
+"Veriler sadece bu telefonda saklanır, hiçbir yere gönderilmez. Safari geçmişini temizlerken \"Web Sitesi Verileri\"ni silersen kayıtlar da gider — arada bir dışa aktarıp yedek alman iyi olur.":"Your data is stored only on this phone and is never sent anywhere. If you clear \"Website Data\" while clearing Safari history, the records go too — it's worth exporting a backup now and then.",
+"hacim":"volume",
+"toplam":"total",
+/* --- gezinme + ekran başlıkları --- */
+"Ana Sayfa":"Home","Antrenmanlar":"Workouts","Geçmiş":"History","İlerleme":"Progress","Ayarlar":"Settings",
+"Antrenman":"Workout","Antrenman A":"Workout A","Antrenman B":"Workout B","Antrenman C":"Workout C",
+"Bilinmeyen antrenman":"Unknown workout",
+/* --- selamlama + tarih --- */
+"İyi Geceler":"Good night","Günaydın":"Good morning","İyi Günler":"Good afternoon","İyi Akşamlar":"Good evening",
+"Bugün":"Today","Dün":"Yesterday"," gün önce":" days ago","bugün":"today","önceki":"previous","sonraki":"next",
+"dk":"min","Sporcu":"Athlete",
+/* --- ana ekran --- */
+"Bugünkü Antrenman":"Today's workout","Bugünkü Hazırlık":"Today's readiness","Hazırlık Skorun":"Your readiness score",
+"Hazırlık Skoru":"Readiness score","Hazırlık":"Readiness","Hazırlığını gir":"Log your readiness",
+"Hazırlık skorunu gir →":"Log your readiness →","Bu Hafta":"This week","Son Antrenman":"Last workout",
+"Hızlı Özet":"Quick summary","Toplam Hacim":"Total volume","Toplam Set":"Total sets","Süre":"Duration",
+"Antrenman Hacmi":"Training volume","Sıradaki":"Next","Sıradaki antrenman":"Next workout",
+"BAŞLA":"START","BAŞLA ›":"START ›","Bu antrenmanı başlat":"Start this workout",
+"Program A → B → C sırasıyla döner. İstersen sıradakini atlayıp başka antrenman başlatabilirsin.":"The program cycles A → B → C. You can skip ahead and start a different workout if you want.",
+/* --- hazırlık ekranı --- */
+"Bugün kendini nasıl hissediyorsun? Her birini 1-5 arası kaydır.":"How do you feel today? Slide each one from 1 to 5.",
+"Uyku":"Sleep","Enerji":"Energy","Stres":"Stress","Kas Ağrısı":"Soreness",
+"Harika görünüyorsun. Bugün ağırlığı zorlayabilirsin.":"You look great. You can push the weight today.",
+"İyi görünüyorsun. Devam!":"Looking good. Keep going!",
+"Orta. Isınmaya daha çok zaman ayır.":"Middling. Spend more time warming up.",
+"Dinlenme gerekebilir. Bugün hafif tut.":"You may need rest. Keep it light today.",
+/* --- antrenman ekranı --- */
+"Set":"Set","Tekrar":"Reps","Hedef":"Target","Hedef RPE":"Target RPE","Isınma Setleri":"Warm-up sets",
+"Çalışma Setleri":"Work sets","Çalışma Ağırlığı":"Working weight","Isınmadan":"From warm-up","Tekrar sayısı:":"Reps:",
+"Temizle":"Clear","Kaydet":"Save","ANTRENMANI BİTİR":"FINISH WORKOUT","SONRAKİ HAREKET":"NEXT EXERCISE",
+"ANTRENMANA DÖN":"BACK TO WORKOUT","ANA SAYFAYA DÖN":"BACK TO HOME","RPE'siz devam et":"Continue without RPE",
+"Antrenman Tamamlandı":"Workout complete","Performans Özeti":"Performance summary","Geçen sefere göre":"vs last time",
+"Aynı —":"Same —","değişim yok":"no change","+30sn":"+30s","Her ":"Every ",
+/* --- RPE --- */
+"Kolay — 4+ tekrar kaldı":"Easy — 4+ reps left","Orta — 3 tekrar kaldı":"Moderate — 3 reps left",
+"Zor — 2 tekrar kaldı":"Hard — 2 reps left","Çok zor — 1 tekrar kaldı":"Very hard — 1 rep left",
+"Maksimum — daha yapamazdım":"Maximum — nothing left",
+"Kolay":"Easy","Orta":"Moderate","Zor":"Hard","Çok zor":"Very hard","Maks.":"Max",
+"4+ kaldı":"4+ left","3 kaldı":"3 left","2 kaldı":"2 left","1 kaldı":"1 left","yapamazdım":"nothing left",
+/* --- plaka hesabı --- */
+"Plakalar":"Plates","TOPLAM":"TOTAL","HER KOLA":"PER SIDE","PLAKA HESABI KAPALI":"PLATE CALCULATOR OFF",
+"plakasız":"no plates","boş":"empty","ekle ":"add ","çıkar ":"remove ","2 kat":"×2","Açık":"On","Kapalı":"Off",
+/* --- geçmiş --- */
+"Hareketler":"Exercises","Hareket Ağırlıkları":"Exercise weights","Vücut Ağırlığı":"Body weight",
+"Vücut ağırlığı":"Body weight","vücut ağırlığı":"body weight","Vücut ağırlığın":"Your body weight",
+"Bugünkü kilon":"Today's weight","Kilo":"Weight","Kg":"Kg","Vücut":"Body","aç":"open","gizle":"hide",
+/* --- ilerleme --- */
+"Genel Bakış":"Overview","Egzersizler":"Exercises","Performans":"Performance","Hacim":"Volume",
+"Tahmini 1RM":"Estimated 1RM","Başarı":"Success rate","Ort. Artış":"Avg. increase","Ort. RPE":"Avg. RPE",
+"Başlangıçtan":"Since start","Mevcut":"Current","Takıldı":"Stuck","Dikkat isteyen":"Needs attention",
+"4 hafta ilerleme":"4-week forecast","Tümü":"All","3 Ay":"3 mo","6 Ay":"6 mo","1 Yıl":"1 yr","4hf":"4wk",
+"Zamanla her hareketin çalışma ağırlığı":"Working weight of each exercise over time",
+"↗ hızlı":"↗ fast","↗ düzenli":"↗ steady","→ yavaşlıyor":"→ slowing","◆ dengelendi":"◆ levelled off",
+"Hedefi tutturuyorsun ama zorlanman sürekli yüksek. Sistem bu yüzden ağırlığı artırmıyor.":"You keep hitting the target but your effort stays high. That's why the system isn't adding weight.",
+/* --- boş durumlar --- */
+"Antrenman kaydettikçe burada özet oluşacak.":"A summary will build up here as you log workouts.",
+"Antrenman kaydettikçe egzersiz analizleri burada olacak.":"Exercise analysis will appear here as you log workouts.",
+"Birkaç antrenman sonra burada analiz görünecek.":"Analysis will appear here after a few workouts.",
+"Hazırlık skorunu düzenli girdikçe burada trend oluşacak.":"A trend will build up here as you log readiness regularly.",
+"Bu aralıkta yeterli veri yok":"Not enough data in this range",
+"Grafik için en az 2 kayıt gerekli":"At least 2 records are needed for a chart",
+"Grafik için en az 2 kayıtlı antrenman gerekli":"At least 2 logged workouts are needed for a chart",
+"Grafik için en az 2 kilo kaydı gerekli — İlerleme › Vücut'tan ekleyebilirsin":"At least 2 weight entries are needed for a chart — add them under Progress › Body",
+/* --- kurulum --- */
+"Başlangıç Ayarları":"Initial setup","Test Setleri":"Test sets","Programı Oluştur":"Create program",
+"Programı kur":"Set up program","Ad":"Name","Adın (isteğe bağlı)":"Your name (optional)",
+"Her hareket için rahatça kaldırabildiğin bir ağırlık ve tekrar sayısı gir. Uygulama bunlardan başlangıç ağırlıklarını hesaplar.":"For each exercise, enter a weight you can lift comfortably and how many reps you got. The app calculates your starting weights from these.",
+"Emin değilsen tahmini bir değer gir — program ilk hafta hafif başlar ve kendini hızlıca ayarlar.":"If you're unsure, put in an estimate — the program starts light in the first week and adjusts itself quickly.",
+/* --- ayarlar --- */
+"Mola zili":"Rest bell","Veri":"Data","Her Şeyi Sıfırla":"Reset everything",
+"Verilerimi Dışa Aktar (JSON)":"Export my data (JSON)","Yedekten Geri Yükle (JSON)":"Restore from backup (JSON)",
+"Yedeği Yapıştırarak Geri Yükle":"Restore by pasting a backup","Yapıştırılanı Yükle":"Load pasted data",
+"artış":"increment","kademe":"step","Veriler kaydedilemiyor.":"Your data can't be saved.",
+"Yedek dosyasını bir metin düzenleyicide aç, tümünü kopyala ve buraya yapıştır…":"Open the backup file in a text editor, copy all of it and paste it here…",
+"Dil":"Language",
+/* --- uyarılar --- */
+"Antrenmanı iptal et? Girdiğin veriler silinir.":"Cancel this workout? The data you entered will be deleted.",
+"Tüm veriler silinecek. Emin misin?":"All data will be deleted. Are you sure?",
+"Son kez soruyorum — bu geri alınamaz. Sil?":"Asking one last time — this can't be undone. Delete?",
+"Bu dosya bir antrenman yedeği gibi görünmüyor.":"This file doesn't look like a workout backup.",
+"Bu metin bir antrenman yedeği gibi görünmüyor.":"This text doesn't look like a workout backup.",
+"Bu sayı fazla yüksek görünüyor. En fazla 200 girebilirsin.":"That number looks too high. The maximum is 200.",
+"Önce yedek metnini kutuya yapıştır.":"Paste the backup text into the box first.",
+"Dosya okunamadı. Geçerli JSON değil.":"The file couldn't be read. It isn't valid JSON.",
+"Yapıştırdığın metin geçerli JSON değil.":"The text you pasted isn't valid JSON.",
+"Dosya açılamadı: ":"The file couldn't be opened: ","Dosya okunurken hata oluştu: ":"An error occurred while reading the file: ",
+"bilinmeyen":"unknown",
+"Veri kaydedilemedi.\n\nTarayıcı bu sayfada depolamaya izin vermiyor. Dosyayı bilgisayardan açtıysan (adres çubuğunda file:// yazıyorsa) bu normaldir — GitHub Pages adresinden aç.":"Your data couldn't be saved.\n\nThe browser isn't allowing storage on this page. If you opened the file from your computer (address bar shows file://) that's expected — open it from the GitHub Pages address instead.",
+"Veriler ekrana yüklendi ama kalıcı olarak kaydedilemedi.\n\nSayfayı yenilersen kaybolur. Uygulamayı GitHub Pages adresinden açıp tekrar dene.":"The data loaded on screen but couldn't be saved permanently.\n\nIt will be lost if you refresh. Open the app from the GitHub Pages address and try again.",
+/* --- hareket adları --- */
+"Üst Göğüs Makinesi (Eğik)":"Incline Chest Press Machine","Triceps Makinesi":"Triceps Machine",
+"Dumbbell Bench Press (arşiv)":"Dumbbell Bench Press (archived)","Leg Raises (arşiv)":"Leg Raises (archived)",
+"Plank (arşiv)":"Plank (archived)",
+/* --- form ipuçları --- */
+"Sırtını ve omuzlarını desteğe yasla":"Keep your back and shoulders against the pad",
+"Sırtını desteğe tam yasla":"Press your back flat into the pad",
+"Sırtını desteğe yasla, kalçan sabit":"Back against the pad, hips still",
+"Sırtını ve omuzlarını mindere tam yapıştır":"Keep your back and shoulders flat on the bench",
+"Göğsünü desteğe yasla":"Chest against the pad",
+"Göğsünü desteğe yasla, gövde sabit":"Chest against the pad, torso still",
+"Göğsünü açarak kolları birleştir":"Open your chest as you bring the arms together",
+"Göğsünü yukarı aç, hafif geriye yaslan":"Chest up, lean back slightly",
+"Göğüs yukarıda, bel doğal kavisinde":"Chest up, natural arch in the lower back",
+"Tutamaklar göğüs hizasında olsun":"Handles at chest height",
+"Tutamaklar omuz hizasında başlasın":"Start with the handles at shoulder height",
+"Tutamakları göğüs üst hizasında tut":"Keep the handles at upper-chest height",
+"Dambıllar göğüs hizasında, bilekler düz":"Dumbbells at chest height, wrists straight",
+"Kontrollü it, üstte kilitleme":"Press under control, don't lock out at the top",
+"Kontrollü indir, serbest bırakma":"Lower under control, don't let it drop",
+"Ağırlığı yavaş bırak, düşürme":"Release the weight slowly, don't drop it",
+"İnerken 2 saniyede kontrollü bırak":"Take 2 seconds to lower under control",
+"İnerken dirsekler 45 derece açıda":"Elbows at about 45 degrees on the way down",
+"İnerken belin kalkıyorsa daha az indir":"If your lower back lifts, don't go as deep",
+"Dirsekler gövdene yakın, sabit":"Elbows close to your body and still",
+"Dirsekler gövdene yapışık, sabit kalsın":"Keep your elbows tight to your body",
+"Dirsekler hafif bükük ve sabit":"Elbows slightly bent and fixed",
+"Dirsekler hafif bükük, omuz hizasına kadar kaldır":"Elbows slightly bent, raise to shoulder height",
+"Dirsekler hafif bükük, omuz hizasında aç":"Elbows slightly bent, open out at shoulder height",
+"Dirsekleri gövdeye yakın geriye çek":"Pull your elbows back close to your body",
+"Dirsekleri tam kilitleme, hafif bükük bırak":"Don't fully lock the elbows, leave a slight bend",
+"Yukarıda dirsekleri tam kilitleme":"Don't lock the elbows out at the top",
+"Aşağıda kolları tam uzat":"Fully extend your arms at the bottom",
+"Sadece ön kolun hareket etsin":"Only your forearm should move",
+"Bileği bükme, düz tut":"Don't bend the wrist, keep it straight",
+"Kürek kemiklerini birbirine sık":"Squeeze your shoulder blades together",
+"Kürek kemiklerini sık":"Squeeze your shoulder blades",
+"Kürekleri sıkarak kolları geriye götür":"Squeeze the shoulder blades as you take the arms back",
+"Omuzlarını sıkıştır, göğsü aç":"Set your shoulders back and open your chest",
+"Omuzlarını kulağına doğru kaldırma":"Don't shrug your shoulders towards your ears",
+"Kollarınla değil, sırtınla çek":"Pull with your back, not your arms",
+"Kollarınla çekme, karın kaslarını kullan":"Don't pull with your arms, use your abs",
+"Barı göğsünün üstüne doğru çek":"Pull the bar towards your upper chest",
+"Gövdeni geriye sallamadan çek":"Pull without swinging your torso back",
+"Ayaklar omuz genişliğinde, topuklar basılı":"Feet shoulder-width apart, heels planted",
+"Ayaklar platformda omuz genişliğinde":"Feet shoulder-width apart on the platform",
+"Dizler ayak parmaklarıyla aynı yönde":"Knees tracking in line with your toes",
+"Dizleri dışa doğru it":"Push your knees outwards",
+"Dizini sertçe kilitleme":"Don't slam your knee into lockout",
+"Diz eklemi makinenin dönme noktasıyla aynı hizada":"Line your knee joint up with the machine's pivot",
+"Belini yuvarlamadan in":"Go down without rounding your lower back",
+"Beli mindere yapışık tut, kalkma":"Keep your lower back on the pad, don't let it lift",
+"Belin yere yapışık, boşluk bırakma":"Lower back flat on the floor, no gap",
+"Kalçanı yukarı kaldırma, çökertme":"Don't lift or drop your hips",
+"Topukları geriye çekerken kalçanı sabit tut":"Keep your hips still as you curl your heels back",
+"Bacakları yavaş indir":"Lower your legs slowly",
+"Karnını sıkarak gövdeni öne kıvır":"Brace your abs and curl your torso forward",
+"Karnını ve kalçanı sık, normal nefes al":"Brace your abs and glutes, breathe normally",
+"Nefesini vererek kıvrıl":"Breathe out as you curl",
+"Vücudun baştan topuğa düz çizgi":"Straight line from head to heels",
+"Ortada bir saniye sık":"Squeeze for a second in the middle",
+"Yukarıda bir saniye bekle, kası sık":"Hold for a second at the top and squeeze"
+},
+fi:{
+/* --- lisätekstit --- */
+"Tarih":"Päivämäärä","Sil":"Poista","Geçmiş bir tarih seçtin — bu kayıt grafiğe eklenir, güncel kilon değişmez.":"Valitsit menneen päivän — merkintä lisätään kuvaajaan, nykyinen painosi ei muutu.",
+
+"set":"sarjaa","egzersiz":"liikettä","devam":"kesken","tamamlandı":"valmis","kalan":"jäljellä",
+
+"Ağırlık: bir sonraki antrenmanda kullanacağın kilo. Artış: hedefi tutturduğunda eklenecek kilo. Kademe alanı sadece pinli makinelerde (Biceps, Triceps) görünür — o makinede gerçekten seçilebilen en küçük adım. Kademe, ağırlığın %10'undan büyükse hareket kaba kademe moduna geçer: ağırlık her antrenman artmaz, önce tekrarlar tavana çıkar, sonra tek seferde bir kademe atlanır. Plakalı makineler bu moda hiç girmez.":"Paino: kuorma, jota käytät seuraavassa treenissä. Nousu: kuorma, joka lisätään kun osut tavoitteeseen. Porras-kenttä näkyy vain tappilaitteissa (hauis, ojentaja) — se on pienin askel, jonka laite oikeasti tarjoaa. Jos porras on yli 10 % painosta, liike siirtyy karkean portaan tilaan: paino ei nouse joka treenissä, vaan ensin toistot nousevat vaihteluvälin ylärajaan ja sitten otetaan yksi porras kerralla. Levykuormitteiset laitteet eivät koskaan siirry tähän tilaan.",
+"Mola zili: süre bitince ses çalar. Açıkken mola boyunca çok kısık bir ses çalar — bu olmadan iPhone sayfayı dondurur ve zil hiç çalmaz. Podcast veya müziğini duraklatabilir, telefon sessiz moddayken de duyulmaz. Sayaç, zil kapalıyken de doğru çalışır.":"Palautuskello: ääni soi, kun aika päättyy. Päällä ollessaan hyvin hiljainen ääni soi koko palautuksen ajan — ilman sitä iPhone jäädyttää sivun eikä kello soi lainkaan. Se voi keskeyttää podcastin tai musiikin, eikä sitä kuulu puhelimen ollessa äänettömällä. Ajastin toimii oikein myös kellon ollessa pois päältä.",
+"Salonunda bulunan plakaları seç. Hareket ekranındaki hesap bunlara göre yapılır. Tek taraf / toplam ayarını her hareketin kendi ekranından değiştirebilirsin.":"Valitse salillasi olevat levyt. Liikenäytön laskenta perustuu näihin. Per puoli / yhteensä -asetusta voit vaihtaa kunkin liikkeen omalta näytöltä.",
+"Veriler sadece bu telefonda saklanır, hiçbir yere gönderilmez. Safari geçmişini temizlerken \"Web Sitesi Verileri\"ni silersen kayıtlar da gider — arada bir dışa aktarıp yedek alman iyi olur.":"Tiedot tallennetaan vain tähän puhelimeen eikä niitä lähetetä minnekään. Jos tyhjennät Safarin historian yhteydessä \"Verkkosivustojen tiedot\", myös merkinnät katoavat — kannattaa viedä varmuuskopio silloin tällöin.",
+"hacim":"volyymi",
+"toplam":"yhteensä",
+/* --- navigointi + näyttöjen otsikot --- */
+"Ana Sayfa":"Etusivu","Antrenmanlar":"Treenit","Geçmiş":"Historia","İlerleme":"Kehitys","Ayarlar":"Asetukset",
+"Antrenman":"Treeni","Antrenman A":"Treeni A","Antrenman B":"Treeni B","Antrenman C":"Treeni C",
+"Bilinmeyen antrenman":"Tuntematon treeni",
+/* --- tervehdys + päivämäärä --- */
+"İyi Geceler":"Hyvää yötä","Günaydın":"Huomenta","İyi Günler":"Hyvää päivää","İyi Akşamlar":"Hyvää iltaa",
+"Bugün":"Tänään","Dün":"Eilen"," gün önce":" päivää sitten","bugün":"tänään","önceki":"edellinen","sonraki":"seuraava",
+"dk":"min","Sporcu":"Urheilija",
+/* --- etusivu --- */
+"Bugünkü Antrenman":"Päivän treeni","Bugünkü Hazırlık":"Päivän valmius","Hazırlık Skorun":"Valmiusarvosi",
+"Hazırlık Skoru":"Valmiusarvo","Hazırlık":"Valmius","Hazırlığını gir":"Kirjaa valmiutesi",
+"Hazırlık skorunu gir →":"Kirjaa valmiutesi →","Bu Hafta":"Tällä viikolla","Son Antrenman":"Viime treeni",
+"Hızlı Özet":"Pikakatsaus","Toplam Hacim":"Kokonaisvolyymi","Toplam Set":"Sarjoja yhteensä","Süre":"Kesto",
+"Antrenman Hacmi":"Treenivolyymi","Sıradaki":"Seuraava","Sıradaki antrenman":"Seuraava treeni",
+"BAŞLA":"ALOITA","BAŞLA ›":"ALOITA ›","Bu antrenmanı başlat":"Aloita tämä treeni",
+"Program A → B → C sırasıyla döner. İstersen sıradakini atlayıp başka antrenman başlatabilirsin.":"Ohjelma kiertää järjestyksessä A → B → C. Voit halutessasi ohittaa seuraavan ja aloittaa toisen treenin.",
+/* --- valmiusnäyttö --- */
+"Bugün kendini nasıl hissediyorsun? Her birini 1-5 arası kaydır.":"Miltä sinusta tuntuu tänään? Liu'uta jokainen välillä 1–5.",
+"Uyku":"Uni","Enerji":"Energia","Stres":"Stressi","Kas Ağrısı":"Lihaskipu",
+"Harika görünüyorsun. Bugün ağırlığı zorlayabilirsin.":"Näyttää hyvältä. Tänään voit painaa kunnolla.",
+"İyi görünüyorsun. Devam!":"Hyvältä näyttää. Jatka samaan malliin!",
+"Orta. Isınmaya daha çok zaman ayır.":"Keskinkertainen. Käytä lämmittelyyn enemmän aikaa.",
+"Dinlenme gerekebilir. Bugün hafif tut.":"Saatat tarvita lepoa. Pidä tämä päivä kevyenä.",
+/* --- treeninäyttö --- */
+"Set":"Sarja","Tekrar":"Toistot","Hedef":"Tavoite","Hedef RPE":"Tavoite-RPE","Isınma Setleri":"Lämmittelysarjat",
+"Çalışma Setleri":"Työsarjat","Çalışma Ağırlığı":"Työpaino","Isınmadan":"Lämmittelystä","Tekrar sayısı:":"Toistoja:",
+"Temizle":"Tyhjennä","Kaydet":"Tallenna","ANTRENMANI BİTİR":"LOPETA TREENI","SONRAKİ HAREKET":"SEURAAVA LIIKE",
+"ANTRENMANA DÖN":"TAKAISIN TREENIIN","ANA SAYFAYA DÖN":"TAKAISIN ETUSIVULLE","RPE'siz devam et":"Jatka ilman RPE:tä",
+"Antrenman Tamamlandı":"Treeni valmis","Performans Özeti":"Suoritusyhteenveto","Geçen sefere göre":"Edelliseen verrattuna",
+"Aynı —":"Sama —","değişim yok":"ei muutosta","+30sn":"+30 s","Her ":"Joka ",
+/* --- RPE --- */
+"Kolay — 4+ tekrar kaldı":"Helppo — 4+ toistoa jäi","Orta — 3 tekrar kaldı":"Kohtalainen — 3 toistoa jäi",
+"Zor — 2 tekrar kaldı":"Raskas — 2 toistoa jäi","Çok zor — 1 tekrar kaldı":"Erittäin raskas — 1 toisto jäi",
+"Maksimum — daha yapamazdım":"Maksimi — ei olisi tullut enempää",
+"Kolay":"Helppo","Orta":"Kohtalainen","Zor":"Raskas","Çok zor":"Erittäin raskas","Maks.":"Maksimi",
+"4+ kaldı":"4+ jäi","3 kaldı":"3 jäi","2 kaldı":"2 jäi","1 kaldı":"1 jäi","yapamazdım":"ei enempää",
+/* --- levylaskuri --- */
+"Plakalar":"Levyt","TOPLAM":"YHTEENSÄ","HER KOLA":"PER PUOLI","PLAKA HESABI KAPALI":"LEVYLASKURI POIS",
+"plakasız":"ei levyjä","boş":"tyhjä","ekle ":"lisää ","çıkar ":"poista ","2 kat":"×2","Açık":"Päällä","Kapalı":"Pois",
+/* --- historia --- */
+"Hareketler":"Liikkeet","Hareket Ağırlıkları":"Liikkeiden painot","Vücut Ağırlığı":"Kehon paino",
+"Vücut ağırlığı":"Kehon paino","vücut ağırlığı":"kehon paino","Vücut ağırlığın":"Kehon painosi",
+"Bugünkü kilon":"Päivän paino","Kilo":"Paino","Kg":"Kg","Vücut":"Keho","aç":"avaa","gizle":"piilota",
+/* --- kehitys --- */
+"Genel Bakış":"Yleiskatsaus","Egzersizler":"Liikkeet","Performans":"Suorituskyky","Hacim":"Volyymi",
+"Tahmini 1RM":"Arvioitu 1RM","Başarı":"Onnistumis-%","Ort. Artış":"Ka. nousu","Ort. RPE":"Ka. RPE",
+"Başlangıçtan":"Alusta","Mevcut":"Nykyinen","Takıldı":"Jumissa","Dikkat isteyen":"Vaatii huomiota",
+"4 hafta ilerleme":"4 viikon ennuste","Tümü":"Kaikki","3 Ay":"3 kk","6 Ay":"6 kk","1 Yıl":"1 v","4hf":"4 vk",
+"Zamanla her hareketin çalışma ağırlığı":"Jokaisen liikkeen työpaino ajan mittaan",
+"↗ hızlı":"↗ nopea","↗ düzenli":"↗ tasainen","→ yavaşlıyor":"→ hidastuu","◆ dengelendi":"◆ tasaantunut",
+"Hedefi tutturuyorsun ama zorlanman sürekli yüksek. Sistem bu yüzden ağırlığı artırmıyor.":"Osut tavoitteeseen, mutta rasitus pysyy korkeana. Siksi järjestelmä ei lisää painoa.",
+/* --- tyhjät tilat --- */
+"Antrenman kaydettikçe burada özet oluşacak.":"Yhteenveto kertyy tähän, kun kirjaat treenejä.",
+"Antrenman kaydettikçe egzersiz analizleri burada olacak.":"Liikeanalyysit ilmestyvät tähän, kun kirjaat treenejä.",
+"Birkaç antrenman sonra burada analiz görünecek.":"Analyysi ilmestyy tähän muutaman treenin jälkeen.",
+"Hazırlık skorunu düzenli girdikçe burada trend oluşacak.":"Trendi kertyy tähän, kun kirjaat valmiuden säännöllisesti.",
+"Bu aralıkta yeterli veri yok":"Tällä aikavälillä ei ole tarpeeksi tietoa",
+"Grafik için en az 2 kayıt gerekli":"Kuvaaja tarvitsee vähintään 2 merkintää",
+"Grafik için en az 2 kayıtlı antrenman gerekli":"Kuvaaja tarvitsee vähintään 2 kirjattua treeniä",
+"Grafik için en az 2 kilo kaydı gerekli — İlerleme › Vücut'tan ekleyebilirsin":"Kuvaaja tarvitsee vähintään 2 painomerkintää — voit lisätä ne kohdasta Kehitys › Keho",
+/* --- alkuasetukset --- */
+"Başlangıç Ayarları":"Alkuasetukset","Test Setleri":"Testisarjat","Programı Oluştur":"Luo ohjelma",
+"Programı kur":"Määritä ohjelma","Ad":"Nimi","Adın (isteğe bağlı)":"Nimesi (valinnainen)",
+"Her hareket için rahatça kaldırabildiğin bir ağırlık ve tekrar sayısı gir. Uygulama bunlardan başlangıç ağırlıklarını hesaplar.":"Syötä jokaiselle liikkeelle paino, jonka nostat mukavasti, ja toistojen määrä. Sovellus laskee näistä aloituspainot.",
+"Emin değilsen tahmini bir değer gir — program ilk hafta hafif başlar ve kendini hızlıca ayarlar.":"Jos et ole varma, syötä arvio — ohjelma alkaa ensimmäisellä viikolla kevyesti ja säätää itsensä nopeasti.",
+/* --- asetukset --- */
+"Mola zili":"Palautuskello","Veri":"Tiedot","Her Şeyi Sıfırla":"Nollaa kaikki",
+"Verilerimi Dışa Aktar (JSON)":"Vie tietoni (JSON)","Yedekten Geri Yükle (JSON)":"Palauta varmuuskopiosta (JSON)",
+"Yedeği Yapıştırarak Geri Yükle":"Palauta liittämällä varmuuskopio","Yapıştırılanı Yükle":"Lataa liitetty teksti",
+"artış":"nousu","kademe":"porras","Veriler kaydedilemiyor.":"Tietoja ei voi tallentaa.",
+"Yedek dosyasını bir metin düzenleyicide aç, tümünü kopyala ve buraya yapıştır…":"Avaa varmuuskopiotiedosto tekstieditorissa, kopioi kaikki ja liitä se tähän…",
+"Dil":"Kieli",
+/* --- ilmoitukset --- */
+"Antrenmanı iptal et? Girdiğin veriler silinir.":"Perutaanko treeni? Syöttämäsi tiedot poistetaan.",
+"Tüm veriler silinecek. Emin misin?":"Kaikki tiedot poistetaan. Oletko varma?",
+"Son kez soruyorum — bu geri alınamaz. Sil?":"Kysyn viimeisen kerran — tätä ei voi perua. Poistetaanko?",
+"Bu dosya bir antrenman yedeği gibi görünmüyor.":"Tämä tiedosto ei näytä treenien varmuuskopiolta.",
+"Bu metin bir antrenman yedeği gibi görünmüyor.":"Tämä teksti ei näytä treenien varmuuskopiolta.",
+"Bu sayı fazla yüksek görünüyor. En fazla 200 girebilirsin.":"Luku näyttää liian suurelta. Enimmäisarvo on 200.",
+"Önce yedek metnini kutuya yapıştır.":"Liitä ensin varmuuskopion teksti kenttään.",
+"Dosya okunamadı. Geçerli JSON değil.":"Tiedostoa ei voitu lukea. Se ei ole kelvollista JSONia.",
+"Yapıştırdığın metin geçerli JSON değil.":"Liittämäsi teksti ei ole kelvollista JSONia.",
+"Dosya açılamadı: ":"Tiedostoa ei voitu avata: ","Dosya okunurken hata oluştu: ":"Tiedoston lukemisessa tapahtui virhe: ",
+"bilinmeyen":"tuntematon",
+"Veri kaydedilemedi.\n\nTarayıcı bu sayfada depolamaya izin vermiyor. Dosyayı bilgisayardan açtıysan (adres çubuğunda file:// yazıyorsa) bu normaldir — GitHub Pages adresinden aç.":"Tietoja ei voitu tallentaa.\n\nSelain ei salli tallennusta tällä sivulla. Jos avasit tiedoston tietokoneelta (osoiterivillä lukee file://), tämä on normaalia — avaa sovellus GitHub Pages -osoitteesta.",
+"Veriler ekrana yüklendi ama kalıcı olarak kaydedilemedi.\n\nSayfayı yenilersen kaybolur. Uygulamayı GitHub Pages adresinden açıp tekrar dene.":"Tiedot latautuivat näytölle, mutta niitä ei voitu tallentaa pysyvästi.\n\nJos päivität sivun, ne katoavat. Avaa sovellus GitHub Pages -osoitteesta ja yritä uudelleen.",
+/* --- liikkeiden nimet --- */
+"Üst Göğüs Makinesi (Eğik)":"Vinopenkkiprässi (laite)","Triceps Makinesi":"Ojentajalaite",
+"Dumbbell Bench Press (arşiv)":"Dumbbell Bench Press (arkisto)","Leg Raises (arşiv)":"Leg Raises (arkisto)",
+"Plank (arşiv)":"Plank (arkisto)",
+/* --- suoritusvinkit --- */
+"Sırtını ve omuzlarını desteğe yasla":"Pidä selkä ja hartiat tukea vasten",
+"Sırtını desteğe tam yasla":"Paina selkä kokonaan tukea vasten",
+"Sırtını desteğe yasla, kalçan sabit":"Selkä tukea vasten, lantio paikallaan",
+"Sırtını ve omuzlarını mindere tam yapıştır":"Pidä selkä ja hartiat kiinni penkissä",
+"Göğsünü desteğe yasla":"Rintakehä tukea vasten",
+"Göğsünü desteğe yasla, gövde sabit":"Rintakehä tukea vasten, keskivartalo paikallaan",
+"Göğsünü açarak kolları birleştir":"Avaa rintakehää ja tuo kädet yhteen",
+"Göğsünü yukarı aç, hafif geriye yaslan":"Rinta ylös, nojaa hieman taaksepäin",
+"Göğüs yukarıda, bel doğal kavisinde":"Rinta ylhäällä, alaselkä luonnollisessa notkossa",
+"Tutamaklar göğüs hizasında olsun":"Kahvat rinnan korkeudella",
+"Tutamaklar omuz hizasında başlasın":"Aloita kahvat hartioiden korkeudelta",
+"Tutamakları göğüs üst hizasında tut":"Pidä kahvat ylärinnan korkeudella",
+"Dambıllar göğüs hizasında, bilekler düz":"Käsipainot rinnan korkeudella, ranteet suorina",
+"Kontrollü it, üstte kilitleme":"Työnnä hallitusti, älä lukitse yläasennossa",
+"Kontrollü indir, serbest bırakma":"Laske hallitusti, älä päästä irti",
+"Ağırlığı yavaş bırak, düşürme":"Laske paino hitaasti, älä pudota",
+"İnerken 2 saniyede kontrollü bırak":"Laske hallitusti kahden sekunnin ajan",
+"İnerken dirsekler 45 derece açıda":"Kyynärpäät noin 45 asteen kulmassa alas tullessa",
+"İnerken belin kalkıyorsa daha az indir":"Jos alaselkä irtoaa, älä laske niin syvälle",
+"Dirsekler gövdene yakın, sabit":"Kyynärpäät lähellä vartaloa ja paikallaan",
+"Dirsekler gövdene yapışık, sabit kalsın":"Pidä kyynärpäät tiukasti kiinni kyljissä",
+"Dirsekler hafif bükük ve sabit":"Kyynärpäät hieman koukussa ja paikallaan",
+"Dirsekler hafif bükük, omuz hizasına kadar kaldır":"Kyynärpäät hieman koukussa, nosta hartialinjaan",
+"Dirsekler hafif bükük, omuz hizasında aç":"Kyynärpäät hieman koukussa, avaa hartialinjassa",
+"Dirsekleri gövdeye yakın geriye çek":"Vedä kyynärpäät taakse lähellä vartaloa",
+"Dirsekleri tam kilitleme, hafif bükük bırak":"Älä lukitse kyynärpäitä täysin, jätä pieni koukku",
+"Yukarıda dirsekleri tam kilitleme":"Älä lukitse kyynärpäitä yläasennossa",
+"Aşağıda kolları tam uzat":"Ojenna kädet täysin ala-asennossa",
+"Sadece ön kolun hareket etsin":"Vain kyynärvarren tulee liikkua",
+"Bileği bükme, düz tut":"Älä taivuta rannetta, pidä se suorana",
+"Kürek kemiklerini birbirine sık":"Purista lapaluita yhteen",
+"Kürek kemiklerini sık":"Purista lapaluita",
+"Kürekleri sıkarak kolları geriye götür":"Purista lapaluita ja vie kädet taakse",
+"Omuzlarını sıkıştır, göğsü aç":"Vedä hartiat taakse ja avaa rintakehä",
+"Omuzlarını kulağına doğru kaldırma":"Älä nosta hartioita korvia kohti",
+"Kollarınla değil, sırtınla çek":"Vedä selällä, älä käsillä",
+"Kollarınla çekme, karın kaslarını kullan":"Älä vedä käsillä, käytä vatsalihaksia",
+"Barı göğsünün üstüne doğru çek":"Vedä tanko ylärintaa kohti",
+"Gövdeni geriye sallamadan çek":"Vedä heilauttamatta vartaloa taaksepäin",
+"Ayaklar omuz genişliğinde, topuklar basılı":"Jalat hartioiden leveydellä, kantapäät kiinni",
+"Ayaklar platformda omuz genişliğinde":"Jalat hartioiden leveydellä levyllä",
+"Dizler ayak parmaklarıyla aynı yönde":"Polvet samaan suuntaan varpaiden kanssa",
+"Dizleri dışa doğru it":"Työnnä polvia ulospäin",
+"Dizini sertçe kilitleme":"Älä lukitse polvea rajusti",
+"Diz eklemi makinenin dönme noktasıyla aynı hizada":"Polvinivel samaan linjaan laitteen kiertopisteen kanssa",
+"Belini yuvarlamadan in":"Laskeudu pyöristämättä alaselkää",
+"Beli mindere yapışık tut, kalkma":"Pidä alaselkä kiinni tuessa, älä anna sen nousta",
+"Belin yere yapışık, boşluk bırakma":"Alaselkä kiinni lattiassa, ei rakoa",
+"Kalçanı yukarı kaldırma, çökertme":"Älä nosta äläkä pudota lantiota",
+"Topukları geriye çekerken kalçanı sabit tut":"Pidä lantio paikallaan, kun vedät kantapäitä taakse",
+"Bacakları yavaş indir":"Laske jalat hitaasti",
+"Karnını sıkarak gövdeni öne kıvır":"Jännitä vatsa ja rullaa ylävartalo eteen",
+"Karnını ve kalçanı sık, normal nefes al":"Jännitä vatsa ja pakarat, hengitä normaalisti",
+"Nefesini vererek kıvrıl":"Puhalla ulos kun rullaat",
+"Vücudun baştan topuğa düz çizgi":"Suora linja päästä kantapäihin",
+"Ortada bir saniye sık":"Purista sekunnin ajan keskiasennossa",
+"Yukarıda bir saniye bekle, kası sık":"Pidä sekunti yläasennossa ja purista lihasta"
+}
+};
+
+/* Tek metin çevirisi. Türkçe seçiliyken kaynak metin aynen döner. */
+function T(s){
+  if(!s || S.lang === "tr" || !S.lang) return s;
+  const d = TRS[S.lang];
+  return (d && d[s] != null) ? d[s] : s;
+}
+/* Şablonlu metin: T.f("Hedefi tutturdun{0}", rpeTxt) yerine
+   doğrudan parçaları çevirip birleştiriyoruz — bkz. decisionNote. */
+
+/* Ekran çizildikten SONRA çalışan çevirmen. render() metni her seferinde
+   Türkçe üretir, bu geçiş onu hedef dile çevirir. Böylece 250 çağrı
+   yerine tek yer var ve Türkçe seçiliyken maliyet sıfır. */
+const TX_ATTRS = ["placeholder","aria-label","title"];
+function txDom(root){
+  if(!root || S.lang === "tr" || !S.lang) return;
+  const d = TRS[S.lang]; if(!d) return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const hits = [];
+  let n;
+  while((n = w.nextNode())){
+    const raw = n.nodeValue;
+    const t = raw.trim();
+    if(!t || d[t] == null) continue;
+    hits.push([n, raw.replace(t, () => d[t])]);
+  }
+  hits.forEach(([node, val]) => { node.nodeValue = val; });
+  root.querySelectorAll("[placeholder],[aria-label],[title]").forEach(el => {
+    TX_ATTRS.forEach(a => {
+      const v = el.getAttribute(a);
+      if(v && d[v.trim()] != null) el.setAttribute(a, d[v.trim()]);
+    });
+  });
+}
+function txAll(){
+  if(S.lang === "tr" || !S.lang) return;
+  txDom($app); txDom($nav); txDom($rest);
+}
+window.setLang = function(l){
+  if(!LANGS[l]) return;
+  S.lang = l; save();
+  document.documentElement.setAttribute("lang", l);
+  render();
+};
+
 function render(){
   if(!S.setup){ renderSetup(); return; }
   if(view === "session" && live){ renderSession(); }
@@ -1456,6 +1813,7 @@ function render(){
   else { view="home"; renderHome(); }
   renderNav();
   renderRest();
+  txAll();
 }
 window.go = function(v){ view=v; window.scrollTo(0,0); render(); };
 
@@ -1582,12 +1940,12 @@ function renderHome(){
       <div class="qs">
         <div class="k">Antrenman</div>
         <div class="v">${weekSess.length}<small> / ${weekTarget}</small></div>
-        <div class="s">${weekSess.length>=weekTarget?"tamamlandı":"devam"}</div>
+        <div class="s">${weekSess.length>=weekTarget?T("tamamlandı"):T("devam")}</div>
         <div class="viz">${ringSVG(weekSess.length, weekTarget)}</div>
       </div>
       <div class="qs">
         <div class="k">Hacim</div>
-        <div class="v">${(Math.round(weekVol/10)*10).toLocaleString("tr-TR")}<small> kg</small></div>
+        <div class="v">${(Math.round(weekVol/10)*10).toLocaleString(loc())}<small> kg</small></div>
         <div class="s">toplam</div>
         <div class="viz">${volBars}</div>
       </div>
@@ -1609,7 +1967,7 @@ function renderHome(){
         <div class="ago">${daysAgo(last.date)}</div>
       </div>
       <div class="botrow">
-        <div class="m">${Math.round(sessionVolume(last)).toLocaleString("tr-TR")} kg hacim</div>
+        <div class="m">${F("{v} kg hacim",{v:Math.round(sessionVolume(last)).toLocaleString(loc())})}</div>
         ${lastDur?`<div class="t">${lastDur}</div>`:''}
       </div>
     </div>` : ''}
@@ -1740,7 +2098,7 @@ function renderSession(){
       <div class="ex-info">
         <div class="ex-name">${esc(ex.n)}</div>
         <div class="ex-scheme">${ex.scheme}<span class="sep">•</span>RPE ${rpeT ?? '–'}${
-          (()=>{ const t = nextTargetReps(ex); return t ? `<span class="sep">•</span><span style="color:var(--green)">hedef ${t} tekrar</span>` : ''; })()
+          (()=>{ const t = nextTargetReps(ex); return t ? `<span class="sep">•</span><span style="color:var(--green)">${F("hedef {t} tekrar",{t})}</span>` : ''; })()
         }</div>
       </div>
       <div class="ex-side">
@@ -1771,7 +2129,7 @@ function renderSession(){
 }
 
 window.cancelSession = function(){
-  if(confirm("Antrenmanı iptal et? Girdiğin veriler silinir.")){
+  if(confirm(T("Antrenmanı iptal et? Girdiğin veriler silinir."))){
     live=null; save(); stopRest(); view="home"; render();
   }
 };
@@ -1786,7 +2144,7 @@ window.openDetail = function(exId){
 /* Exercise thumbnail: use frame 0 of the animation library, scaled down */
 function exerciseThumb(exId){
   if(DRAW[exId]){
-    return `<svg viewBox="0 0 340 210">${DRAW[exId](0.5)}</svg>`;
+    return `<svg viewBox="0 0 200 140">${DRAW[exId](0.5)}</svg>`;
   }
   return iconSVG('dumbbell');
 }
@@ -1850,7 +2208,7 @@ function renderDetail(){
           if(!t) return '';
           const st = stepOf(ex);
           const top = ex.max != null ? ex.max : t;
-          return `<div class="pill"><span>Hedef</span><span class="hot">${t} tekrar</span><span>•</span><span style="color:var(--muted)">${top} olunca +${fmtKg(st)} kg</span></div>`;
+          return `<div class="pill"><span>Hedef</span><span class="hot">${F("{t} tekrar",{t})}</span><span>•</span><span style="color:var(--muted)">${F("{top} olunca +{st} kg",{top,st:fmtKg(st)})}</span></div>`;
         })()}
       </div>
       <div class="art">${DRAW[ex.id] ? exerciseSVG(ex.id) : iconSVG('dumbbell')}</div>
@@ -1978,7 +2336,7 @@ window.moreReps = function(){
   if(v==null) return;
   const n = parseInt(v,10);
   if(isNaN(n) || n<0) return;
-  if(n>200){ alert("Bu sayı fazla yüksek görünüyor. En fazla 200 girebilirsin."); return; }
+  if(n>200){ alert(T("Bu sayı fazla yüksek görünüyor. En fazla 200 girebilirsin.")); return; }
   enterRep(n);
 };
 window.enterRpe = function(v){
@@ -2069,7 +2427,7 @@ function renderDone(){
       <div class="donestats">
         <div class="donestat"><div class="k">Süre</div><div class="v">${timeStr}</div></div>
         <div class="donestat"><div class="k">Toplam Set</div><div class="v">${d.totalSets}</div></div>
-        <div class="donestat"><div class="k">Toplam Hacim</div><div class="v">${Math.round(d.totalVol).toLocaleString("tr-TR")}<small> kg</small></div></div>
+        <div class="donestat"><div class="k">Toplam Hacim</div><div class="v">${Math.round(d.totalVol).toLocaleString(loc())}<small> kg</small></div></div>
       </div>
     </div>
     ${perfRows ? `<div class="tbl-label">Performans Özeti</div>
@@ -2223,50 +2581,157 @@ function prevEntry(exId, beforeIdx){
 }
 /* O oturumda agirligin neden degistigini/degismedigini aciklar —
    progress() ile ayni kurallari geriye donuk okur, yeni veri saklamaz. */
+/* Karar notu sablonlari. Anahtar = tier. {..} yer tutuculari
+   fill() ile doldurulur. Yeni bir tier eklersen UC dile de satir ekle,
+   yoksa not bos gorunur. */
+const NOTE = {
+tr:{
+ rpe:" (Ort. RPE {v})", to:"→ sonraki: {w} kg",
+ deload:"Son set hedefi ({target} tekrar) tutmadı, {last} kaldı {to} (%10 azaltıldı)",
+ recalibrate:"Hedefin {ratio} katından fazla tekrar çıktın ({last}/{target}) {to} (performansına göre yeniden hesaplandı)",
+ bigjump:"Hedefin {ratio} katı tekrar çıktın ({last}/{target}) {to} (çift artış)",
+ hold_high_rpe:"Hedefi tutturdun ama zorlanma yüksekti{rpe} {to} (sabit tutuldu)",
+ double_low_rpe:"Hedefi rahat tutturdun{rpe} {to} (çift artış)",
+ normal:"Hedefi ({target}+ tekrar) tutturdun{rpe} {to}",
+ hold_weak_sets:"Son set hedefi tuttu ama ilk setler çok düştü ({weak} — hedef {target}) {to} (bu ağırlık henüz oturmadı, aynı kiloda tekrar dene)",
+ coarse_step_up:"Tüm setler {max} tekrarı tuttu{rpe} {to} (bir kademe atlandı, hedef {min} tekrara döner)",
+ coarse_hold:"Aralığın tepesindesin ama zorlanma yüksekti{rpe} {to} (kademe atlamak için bir hafta daha)",
+ coarse_rep_up:"En zayıf setin {worst}/{max} tekrar{rpe} — makine kademesi {step} kg olduğu için ağırlık değil tekrar artıyor (sonraki hedef {next})",
+ coarse_partial:"Setler eksik kaldı {to} (sonraki hedef {next} tekrar)",
+ acc_missed:"Bir sette en az {min} tekrar gerekiyordu, en düşük setin {worst} oldu {to} (sabit kaldı, deload yok)",
+ acc_hold:"Sınırda tutturdun ama zorlanma yüksekti ({worst}/{min}-{max}{rpe}) {to} (sabit tutuldu)",
+ acc_small:"Hedefi tutturdun, aralığın altına yakın kaldın ({worst}/{min}-{max}{rpe}) {to} (küçük artış)",
+ acc_normal:"Her sette hedefi tutturdun ({worst}/{min}-{max}{rpe}) {to}",
+ acc_big:"Aralığın tepesine yakın ve rahat çıktın ({worst}/{min}-{max}{rpe}) {to} (büyük artış)"
+},
+en:{
+ rpe:" (avg RPE {v})", to:"→ next: {w} kg",
+ deload:"The last set missed the target ({target} reps), you got {last} {to} (reduced by 10%)",
+ recalibrate:"You did more than {ratio}× the target reps ({last}/{target}) {to} (recalculated from your performance)",
+ bigjump:"You did {ratio}× the target reps ({last}/{target}) {to} (double increase)",
+ hold_high_rpe:"You hit the target but effort was high{rpe} {to} (weight held)",
+ double_low_rpe:"You hit the target comfortably{rpe} {to} (double increase)",
+ normal:"You hit the target ({target}+ reps){rpe} {to}",
+ hold_weak_sets:"The last set hit the target but the earlier sets dropped off ({weak} — target {target}) {to} (this weight hasn't settled yet, repeat it at the same load)",
+ coarse_step_up:"Every set reached {max} reps{rpe} {to} (moved up one step, target goes back to {min} reps)",
+ coarse_hold:"You're at the top of the range but effort was high{rpe} {to} (one more week before stepping up)",
+ coarse_rep_up:"Your weakest set was {worst}/{max} reps{rpe} — the machine steps in {step} kg, so reps go up instead of weight (next target {next})",
+ coarse_partial:"The sets fell short {to} (next target {next} reps)",
+ acc_missed:"Every set needed at least {min} reps, your lowest was {worst} {to} (held, no deload)",
+ acc_hold:"You just made it but effort was high ({worst}/{min}-{max}{rpe}) {to} (weight held)",
+ acc_small:"You hit the target but stayed near the bottom of the range ({worst}/{min}-{max}{rpe}) {to} (small increase)",
+ acc_normal:"You hit the target in every set ({worst}/{min}-{max}{rpe}) {to}",
+ acc_big:"Near the top of the range and comfortable ({worst}/{min}-{max}{rpe}) {to} (large increase)"
+},
+fi:{
+ rpe:" (ka. RPE {v})", to:"→ seuraava: {w} kg",
+ deload:"Viimeinen sarja jäi tavoitteesta ({target} toistoa), sait {last} {to} (kevennetty 10 %)",
+ recalibrate:"Teit yli {ratio}× tavoitetoistot ({last}/{target}) {to} (laskettu uudelleen suorituksesi perusteella)",
+ bigjump:"Teit {ratio}× tavoitetoistot ({last}/{target}) {to} (kaksinkertainen nousu)",
+ hold_high_rpe:"Osuit tavoitteeseen mutta rasitus oli korkea{rpe} {to} (paino pidetty ennallaan)",
+ double_low_rpe:"Osuit tavoitteeseen vaivatta{rpe} {to} (kaksinkertainen nousu)",
+ normal:"Osuit tavoitteeseen ({target}+ toistoa){rpe} {to}",
+ hold_weak_sets:"Viimeinen sarja osui tavoitteeseen, mutta alkusarjat jäivät selvästi ({weak} — tavoite {target}) {to} (paino ei ole vielä vakiintunut, toista sama paino)",
+ coarse_step_up:"Kaikki sarjat ylsivät {max} toistoon{rpe} {to} (noustu yksi porras, tavoite palaa {min} toistoon)",
+ coarse_hold:"Olet vaihteluvälin yläpäässä mutta rasitus oli korkea{rpe} {to} (vielä yksi viikko ennen porrasnostoa)",
+ coarse_rep_up:"Heikoin sarjasi oli {worst}/{max} toistoa{rpe} — laitteen porras on {step} kg, joten toistot nousevat painon sijaan (seuraava tavoite {next})",
+ coarse_partial:"Sarjat jäivät vajaiksi {to} (seuraava tavoite {next} toistoa)",
+ acc_missed:"Jokaisessa sarjassa piti olla vähintään {min} toistoa, heikoin oli {worst} {to} (pidetty ennallaan, ei kevennystä)",
+ acc_hold:"Ylsit niukasti mutta rasitus oli korkea ({worst}/{min}-{max}{rpe}) {to} (paino pidetty ennallaan)",
+ acc_small:"Osuit tavoitteeseen mutta jäit lähelle vaihteluvälin alarajaa ({worst}/{min}-{max}{rpe}) {to} (pieni nousu)",
+ acc_normal:"Osuit tavoitteeseen joka sarjassa ({worst}/{min}-{max}{rpe}) {to}",
+ acc_big:"Lähellä vaihteluvälin ylärajaa ja vaivatonta ({worst}/{min}-{max}{rpe}) {to} (suuri nousu)"
+}
+};
+
+/* Tarayici alert/confirm kutulari — DOM'da olmadiklari icin cevirmen
+   gecisi bunlara ulasamaz, sablonlari burada duruyor. */
+const MSG = {
+ tr:"Yarım kalmış bir {w} antrenmanın var{ago}.\n\nKaldığın yerden devam etmek ister misin?\n\nTamam = devam et\nİptal = bu antrenmanı sil",
+ en:"You have an unfinished {w} workout{ago}.\n\nDo you want to carry on where you left off?\n\nOK = continue\nCancel = delete this workout",
+ fi:"Sinulla on kesken jäänyt {w}-treeni{ago}.\n\nHaluatko jatkaa siitä mihin jäit?\n\nOK = jatka\nPeruuta = poista tämä treeni"
+};
+const DEL_BW = {
+ tr:"{d} · {kg} kg kaydı silinsin mi?",
+ en:"Delete the record for {d} · {kg} kg?",
+ fi:"Poistetaanko merkintä {d} · {kg} kg?"
+};
+const DONE_MSG = {
+ tr:"Geri yükleme tamamlandı. {n} antrenman kaydı yüklendi.",
+ en:"Restore complete. {n} workout records loaded.",
+ fi:"Palautus valmis. {n} treenimerkintää ladattu."
+};
+const FOUND_MSG = {
+ tr:"Yedek bulundu:\n• {n} antrenman kaydı\n• Vücut ağırlığı: {bw} kg\n\nMevcut verinin ÜZERİNE yazılacak. Devam edilsin mi?",
+ en:"Backup found:\n• {n} workout records\n• Body weight: {bw} kg\n\nThis will OVERWRITE your current data. Continue?",
+ fi:"Varmuuskopio löytyi:\n• {n} treenimerkintää\n• Kehon paino: {bw} kg\n\nTämä KORVAA nykyiset tietosi. Jatketaanko?"
+};
+const fillT = (tpl, o) => String(tpl).replace(/\{(\w+)\}/g, (m,k) => o[k] != null ? o[k] : "");
+
+
+/* Degiskenle karisan kisa metinler. Cevirmen gecisi bunlara ulasamaz
+   (metin dugumu "3 tekrar" gibi degisken iceriyor), o yuzden sablon. */
+const FRAG = {
+en:{
+ "{v} kg hacim":"{v} kg volume",
+ "hedef {t} tekrar":"target {t} reps",
+ "{t} tekrar":"{t} reps",
+ "{top} olunca +{st} kg":"at {top} → +{st} kg",
+ "dinl. ort. {v}":"rest avg. {v}",
+ "· hedef {v}":"· target {v}",
+ "Ort. RPE {v}":"Avg. RPE {v}",
+ "Ort. {v}":"Avg. {v}",
+ "kg · {n} antrenmandır aynı":"kg · same for {n} workouts",
+ "{v} kg · {n} antrenmandır aynı":"{v} kg · same for {n} workouts",
+ "Her {n} antrenmanda":"Every {n} workouts",
+ "Toplam Değişim":"Total change","Toplam Değişim (hacim)":"Total change (volume)",
+ "kg·tekrar":"kg·reps","Son {r}":"Last {r}",
+ "Kaba kademe · {v} kg · tekrarla ilerler":"Coarse step · {v} kg · progresses by reps",
+ "Artış: {v} kg":"Increment: {v} kg"," · kademe {v} kg":" · step {v} kg",
+ "Hedef":"Target"
+},
+fi:{
+ "{v} kg hacim":"{v} kg volyymiä",
+ "hedef {t} tekrar":"tavoite {t} toistoa",
+ "{t} tekrar":"{t} toistoa",
+ "{top} olunca +{st} kg":"kun {top} → +{st} kg",
+ "dinl. ort. {v}":"palautus ka. {v}",
+ "· hedef {v}":"· tavoite {v}",
+ "Ort. RPE {v}":"Ka. RPE {v}",
+ "Ort. {v}":"Ka. {v}",
+ "kg · {n} antrenmandır aynı":"kg · sama {n} treenin ajan",
+ "{v} kg · {n} antrenmandır aynı":"{v} kg · sama {n} treenin ajan",
+ "Her {n} antrenmanda":"Joka {n}. treeni",
+ "Toplam Değişim":"Kokonaismuutos","Toplam Değişim (hacim)":"Kokonaismuutos (volyymi)",
+ "kg·tekrar":"kg·toisto","Son {r}":"Viim. {r}",
+ "Kaba kademe · {v} kg · tekrarla ilerler":"Karkea porras · {v} kg · etenee toistoilla",
+ "Artış: {v} kg":"Nousu: {v} kg"," · kademe {v} kg":" · porras {v} kg",
+ "Hedef":"Tavoite"
+}
+};
+function F(tpl, o){
+  const d = FRAG[S.lang];
+  return fillT((d && d[tpl] != null) ? d[tpl] : tpl, o || {});
+}
+
 function decisionNote(ex, e){
   if(ex.type === "bw" || e.kg == null) return "";
   const d = progressDecision(ex, e.reps, e.rpe, e.kg);
-  const rpeTxt = d.avgRpe != null ? ` (Ort. RPE ${d.avgRpe})` : "";
-  /* Sonucu acikca yaz: bu performansin ardindan agirlik ne oldu.
-     Boylece notun hangi antrenmana ait oldugu tartismasiz olur. */
-  const to = d.weight != null ? `→ sonraki: ${fmtKg(d.weight)} kg` : "";
-
-  switch(d.tier){
-    case "deload":
-      return `Son set hedefi (${ex.target} tekrar) tutmadı, ${d.last} kaldı ${to} (%10 azaltıldı)`;
-    case "recalibrate":
-      return `Hedefin ${Math.round(d.ratio)} katından fazla tekrar çıktın (${d.last}/${ex.target}) ${to} (performansına göre yeniden hesaplandı)`;
-    case "bigjump":
-      return `Hedefin ${Math.round(d.ratio*10)/10} katı tekrar çıktın (${d.last}/${ex.target}) ${to} (çift artış)`;
-    case "hold_high_rpe":
-      return `Hedefi tutturdun ama zorlanma yüksekti${rpeTxt} ${to} (sabit tutuldu)`;
-    case "double_low_rpe":
-      return `Hedefi rahat tutturdun${rpeTxt} ${to} (çift artış)`;
-    case "normal":
-      return `Hedefi (${ex.target}+ tekrar) tutturdun${rpeTxt} ${to}`;
-    case "hold_weak_sets":
-      return `Son set hedefi tuttu ama ilk setler çok düştü (${d.weakReps.join(", ")} — hedef ${ex.target}) ${to} (bu ağırlık henüz oturmadı, aynı kiloda tekrar dene)`;
-    case "coarse_step_up":
-      return `Tüm setler ${d.maxReps} tekrarı tuttu${rpeTxt} ${to} (bir kademe atlandı, hedef ${d.minReps} tekrara döner)`;
-    case "coarse_hold":
-      return `Aralığın tepesindesin ama zorlanma yüksekti${rpeTxt} ${to} (kademe atlamak için bir hafta daha)`;
-    case "coarse_rep_up":
-      return `En zayıf setin ${d.worst}/${d.maxReps} tekrar${rpeTxt} — makine kademesi ${fmtKg(d.step)} kg olduğu için ağırlık değil tekrar artıyor (sonraki hedef ${d.nextTarget})`;
-    case "coarse_partial":
-      return `Setler eksik kaldı ${to} (sonraki hedef ${d.nextTarget} tekrar)`;
-    case "acc_missed":
-      return `Bir sette en az ${d.minReps} tekrar gerekiyordu, en düşük setin ${d.worst} oldu ${to} (sabit kaldı, deload yok)`;
-    case "acc_hold":
-      return `Sınırda tutturdun ama zorlanma yüksekti (${d.worst}/${d.minReps}-${d.maxReps}${rpeTxt}) ${to} (sabit tutuldu)`;
-    case "acc_small":
-      return `Hedefi tutturdun, aralığın altına yakın kaldın (${d.worst}/${d.minReps}-${d.maxReps}${rpeTxt}) ${to} (küçük artış)`;
-    case "acc_normal":
-      return `Her sette hedefi tutturdun (${d.worst}/${d.minReps}-${d.maxReps}${rpeTxt}) ${to}`;
-    case "acc_big":
-      return `Aralığın tepesine yakın ve rahat çıktın (${d.worst}/${d.minReps}-${d.maxReps}${rpeTxt}) ${to} (büyük artış)`;
-    default:
-      return "";
-  }
+  const N = NOTE[S.lang] || NOTE.tr;
+  const tpl = N[d.tier];
+  if(!tpl) return "";
+  const rpeTxt = d.avgRpe != null ? fillT(N.rpe, {v:d.avgRpe}) : "";
+  /* Sonucu acikca yaz: bu performansin ardindan agirlik ne oldu. */
+  const to = d.weight != null ? fillT(N.to, {w:fmtKg(d.weight)}) : "";
+  return fillT(tpl, {
+    rpe: rpeTxt, to: to,
+    target: ex.target, last: d.last,
+    ratio: d.tier === "recalibrate" ? Math.round(d.ratio) : Math.round(d.ratio*10)/10,
+    weak: d.weakReps ? d.weakReps.join(", ") : "",
+    max: d.tier.indexOf("coarse") === 0 ? d.maxReps : d.maxReps,
+    min: d.minReps, worst: d.worst,
+    step: d.step != null ? fmtKg(d.step) : "", next: d.nextTarget
+  });
 }
 
 /* Iki deger arasindaki yonu ok + renk sinifi olarak verir.
@@ -2315,7 +2780,7 @@ function restLine(ex, e){
   const avg = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
   const hedef = REST[ex.type] || 90;
   const uzun = avg > hedef*1.5;
-  return `<div class="hrest">dinl. ort. ${mmss(avg)}${uzun?` <span style="color:var(--amber)">· hedef ${mmss(hedef)}</span>`:''}</div>`;
+  return `<div class="hrest">${F("dinl. ort. {v}",{v:mmss(avg)})}${uzun?` <span style="color:var(--amber)">${F("· hedef {v}",{v:mmss(hedef)})}</span>`:''}</div>`;
 }
 
 function changeLine(ex, s, idx){
@@ -2335,7 +2800,7 @@ function changeLine(ex, s, idx){
   const past = p && p.kg != null ? p.kg : null;
   const note = decisionNote(ex, e);
   /* Not artik "sonraki: X kg" tekrar etmiyor — zincir zaten soyluyor. */
-  const noteClean = note ? note.replace(/\s*→ sonraki: [^(]*/, " ").replace(/\s{2,}/g," ").trim() : "";
+  const noteClean = note ? note.replace(/\s*→[^(]*/, " ").replace(/\s{2,}/g," ").trim() : "";
   const noteHtml = noteClean ? `<div class="hnote">${noteClean}</div>` : "";
   return chainHtml(past, e.kg, next, "kg", fmtKg) + restLine(ex, e) + noteHtml;
 }
@@ -2383,8 +2848,8 @@ function renderHistoryScreen(){
         <div style="flex:1"><div class="n">${esc(wo.name)}</div>
           <div class="d">${trDateLong(s.date)}</div></div>
         <div style="text-align:right">
-          <div class="v">${Math.round(vol).toLocaleString("tr-TR")} kg</div>
-          ${avgRpe!=null?`<div class="hrpe">Ort. RPE ${avgRpe}</div>`:''}
+          <div class="v">${Math.round(vol).toLocaleString(loc())} kg</div>
+          ${avgRpe!=null?`<div class="hrpe">${F("Ort. RPE {v}",{v:avgRpe})}</div>`:''}
         </div>
       </div>
       ${expanded ? detailRows : ''}
@@ -2566,7 +3031,7 @@ function progressGenel(){
             ${chevIcon()}
           </div>
         </div>
-        <div class="pbig">${fmtKg(p.current)}<span class="punit">kg · ${p.flatCount} antrenmandır aynı</span></div>
+        <div class="pbig">${fmtKg(p.current)}<span class="punit">${F("kg · {n} antrenmandır aynı",{n:p.flatCount})}</span></div>
         <div class="rpebars">${bars}</div>
         <div class="pnote">${p.note || 'Hedefi tutturuyorsun ama zorlanman sürekli yüksek. Sistem bu yüzden ağırlığı artırmıyor.'}</div>
       </div>`;
@@ -2579,7 +3044,7 @@ function progressGenel(){
           ${chevIcon()}
         </div>
       </div>
-      <div class="pmuted">${fmtKg(p.current)} kg · ${p.flatCount} antrenmandır aynı</div>
+      <div class="pmuted">${F("{v} kg · {n} antrenmandır aynı",{v:fmtKg(p.current),n:p.flatCount})}</div>
     </div>`;
   }).join("");
 
@@ -2777,7 +3242,7 @@ function volumeChartCard(){
     return `<text x="${x.toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="9" fill="var(--muted)" font-weight="600">${labels[i]}</text>`;
   }).join("");
   return `<div class="chartbox">
-    <div class="hd"><div class="l">Antrenman Hacmi</div><div class="r">${Math.round(vals[vals.length-1]).toLocaleString("tr-TR")}<small>kg</small></div></div>
+    <div class="hd"><div class="l">Antrenman Hacmi</div><div class="r">${Math.round(vals[vals.length-1]).toLocaleString(loc())}<small>kg</small></div></div>
     <svg class="chartsvg" viewBox="0 0 ${W} ${H}">${bars}${xl}</svg>
   </div>`;
 }
@@ -2805,84 +3270,27 @@ function progressEgzersizler(){
   const ex = findEx(progressExId);
   const rangeLbl = ranges.find(r=>r.id===progressRange).l;
 
-  /* Metrik secimi. Otomatik varsayilan: kaba kademede HACIM (agirlik grafigi
-     yanlislikla plato gibi gorunur), digerlerinde AGIRLIK. Kullanici secerse
-     o gecerli — e1RM agirlik+tekrar+RPE'yi tek cizgide birlestirir ve agirlik
-     duz giderken bile gercek ilerlemeyi gosterir. */
+  /* Kaba kademeli hareketlerde agirlik haftalarca duz gidip sonra basamak
+     yapar — grafige bakinca plato saniliyor. Gercek ilerleme tekrarlarda
+     oldugu icin bu hareketlerde HACIM cizdiriyoruz. */
   const coarseEx = isCoarse(ex);
-  const effMetric = progressMetric || (coarseEx ? "hacim" : "agirlik");
-  const metrics = [
-    {id:"agirlik", l:"Ağırlık"},
-    {id:"e1rm",    l:"e1RM"},
-    {id:"hacim",   l:"Hacim"},
-  ];
-  const mSeg = `<div class="rangeseg" style="margin-top:-4px">${metrics.map(m=>
-    `<button class="${effMetric===m.id?'on':''}" onclick="setMetric('${m.id}')">${m.l}</button>`).join("")}</div>`;
-
-  let chartSeries, chartLabel, chartUnit, chartFmt;
-  if(effMetric === "hacim"){
-    chartSeries = series.map(p => ({...p, kg: volumeOfEntry(progressExId, p.date)})).filter(p => p.kg > 0);
-    chartLabel = "Antrenman Hacmi"; chartUnit = "kg·tekrar"; chartFmt = v => Math.round(v).toLocaleString('tr-TR');
-  } else if(effMetric === "e1rm"){
-    chartSeries = series.filter(p => p.e1rm != null).map(p => ({...p, kg: p.e1rm}));
-    chartLabel = "Tahmini 1RM"; chartUnit = "kg"; chartFmt = fmtKg;
-  } else {
-    chartSeries = series;
-    chartLabel = "Çalışma Ağırlığı"; chartUnit = "kg"; chartFmt = fmtKg;
-  }
-
-  /* PR noktalari: TUM gecmise gore o gune kadarki en iyi e1RM'in kirildigi
-     seanslar. Aralik filtresi noktalari gizleyebilir ama PR tanimini bozmaz. */
-  const fullSer = seriesFor(progressExId);
-  /* Ilk e1RM kaydi taban sayilir, PR degildir — PR onceki en iyiyi asmaktir. */
-  const prDates = [];
-  let runBest = null;
-  fullSer.forEach(p => {
-    if(p.e1rm == null) return;
-    if(runBest === null){ runBest = p.e1rm; return; }
-    if(p.e1rm > runBest){ runBest = p.e1rm; prDates.push(p.date); }
-  });
-  const prIdx = effMetric === "e1rm"
-    ? chartSeries.map((p,i)=> prDates.indexOf(p.date) !== -1 ? i : -1).filter(i=>i!==-1)
-    : [];
-
-  const rpeStrip = chartSeries.map(p=>p.rpe);
+  const chartSeries = coarseEx
+    ? series.map(p => ({...p, kg: volumeOfEntry(progressExId, p.date)})).filter(p => p.kg > 0)
+    : series;
   const chart = chartSeries.length >= 2
-    ? bigLineChart(chartSeries, rangeLbl, {label:chartLabel, unit:chartUnit, fmt:chartFmt, prs:prIdx, rpe:rpeStrip})
+    ? bigLineChart(chartSeries, rangeLbl)
     : `<div class="chartbox"><div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Bu aralıkta yeterli veri yok</div></div>`;
-
-  const coarseNote = coarseEx && effMetric === "hacim"
+  const coarseNote = coarseEx
     ? `<div style="font-size:11.5px;color:var(--muted);line-height:1.6;margin:-4px 2px 14px">
          Kademesi ${fmtKg(stepOf(ex))} kg — ağırlık her antrenman artmaz. Grafik <b>hacim</b> (kg × toplam tekrar) gösteriyor; asıl ilerleme orada.
        </div>`
-    : (effMetric === "e1rm" && ex.type === "acc" && (ex.max||0) >= 12
-    ? `<div style="font-size:11.5px;color:var(--muted);line-height:1.6;margin:-4px 2px 14px">
-         Yüksek tekrarlı hareketlerde e1RM tahmini kabalaşır — eğilim doğrudur, mutlak değer değil.
-       </div>`
-    : '');
-
-  /* Rekorlar: en iyi e1RM (tarihiyle), en agir set, en yuksek seans hacmi */
-  let recOrm = null, recSet = null, recVol = null;
-  fullSer.forEach(p => { if(p.e1rm != null && (!recOrm || p.e1rm > recOrm.v)) recOrm = {v:p.e1rm, d:p.date}; });
-  S.sessions.forEach(s => {
-    const e = s.entries[progressExId]; if(!e || e.kg == null) return;
-    const best = Math.max(0, ...(e.reps||[]).map(r=>r||0));
-    if(best > 0 && (!recSet || e.kg > recSet.kg || (e.kg === recSet.kg && best > recSet.r))) recSet = {kg:e.kg, r:best, d:s.date};
-    const vol = (e.reps||[]).reduce((a,r)=> a + (r||0)*e.kg, 0);
-    if(vol > 0 && (!recVol || vol > recVol.v)) recVol = {v:vol, d:s.date};
-  });
-  const records = (recOrm || recSet || recVol) ? `
-    <div class="statgrid">
-      <div><div class="k">En iyi e1RM</div><div class="v">${recOrm?fmtKg(recOrm.v):'—'}<small>kg</small></div>${recOrm?`<div class="k" style="margin:5px 0 0">${trDate(recOrm.d)}</div>`:''}</div>
-      <div><div class="k">En ağır set</div><div class="v">${recSet?fmtKg(recSet.kg):'—'}<small>${recSet?'kg×'+recSet.r:''}</small></div>${recSet?`<div class="k" style="margin:5px 0 0">${trDate(recSet.d)}</div>`:''}</div>
-      <div><div class="k">Seans hacmi</div><div class="v" style="font-size:16px">${recVol?Math.round(recVol.v).toLocaleString('tr-TR'):'—'}<small>kg·tk</small></div>${recVol?`<div class="k" style="margin:5px 0 0">${trDate(recVol.d)}</div>`:''}</div>
-    </div>` : '';
+    : '';
 
   const now = S.weights[progressExId];
   const start = series.length ? series[0].kg : now;
   const delta = now - start;
-  /* Toplam degisim secili metrigi takip eder */
-  const dChange = effMetric !== "agirlik" && chartSeries.length >= 2
+  /* Kaba kademede agirlik farki neredeyse hep 0 cikar — hacim farkini goster */
+  const dChange = coarseEx && chartSeries.length >= 2
     ? chartSeries[chartSeries.length-1].kg - chartSeries[0].kg
     : delta;
   const bestOrm = series.reduce((m,p)=> p.e1rm!=null && p.e1rm>m ? p.e1rm : m, 0);
@@ -2913,32 +3321,27 @@ function progressEgzersizler(){
       <select onchange="progressExId=this.value; render()">${opts}</select>
     </div>
     ${rSeg}
-    ${mSeg}
     ${chart}
     ${coarseNote}
-    ${records}
     <div class="statgrid">
       <div><div class="k">Tahmini 1RM</div><div class="v">${fmtKg(bestOrm)||'—'}<small>kg</small></div></div>
       <div><div class="k">Başarı</div><div class="v">${rate}<small>%</small></div></div>
       <div><div class="k">Ort. RPE</div><div class="v">${avgRpe}</div></div>
     </div>
     <div class="factrow">
-      <div><div class="k">Ort. Artış</div><div class="v">${incRate ? 'Her '+incRate+' antrenmanda' : '—'}</div></div>
+      <div><div class="k">Ort. Artış</div><div class="v">${incRate ? F("Her {n} antrenmanda",{n:incRate}) : "—"}</div></div>
       <div class="icon">↗</div>
     </div>
     <div class="factrow">
-      <div><div class="k">Toplam Değişim${effMetric==='hacim'?' (hacim)':effMetric==='e1rm'?' (e1RM)':''}</div><div class="v" style="color:${dChange>=0?'var(--green)':'var(--red)'}">${dChange>=0?'+':''}${effMetric==='hacim'?Math.round(dChange).toLocaleString('tr-TR'):fmtKg(dChange)} ${effMetric==='hacim'?'kg·tekrar':'kg'}</div></div>
+      <div><div class="k">${F(coarseEx?"Toplam Değişim (hacim)":"Toplam Değişim")}</div><div class="v" style="color:${dChange>=0?'var(--green)':'var(--red)'}">${dChange>=0?'+':''}${coarseEx?Math.round(dChange).toLocaleString('tr-TR'):fmtKg(dChange)} ${coarseEx?F("kg·tekrar"):"kg"}</div></div>
       <div class="icon">${dChange>=0?'↗':'↘'}</div>
     </div>
   `;
 }
 window.setRange = function(r){ progressRange=r; render(); };
-window.setMetric = function(m){ progressMetric=m; render(); };
 
-function bigLineChart(series, rangeLbl, o){
-  o = Object.assign({label:"Çalışma Ağırlığı", unit:"kg", fmt:fmtKg, prs:[], rpe:null}, o||{});
-  const hasRpe = o.rpe && o.rpe.some(v=>v!=null);
-  const W=320, H=hasRpe?196:170, PL=32, PR=10, PT=14, PB=hasRpe?52:26;
+function bigLineChart(series, rangeLbl){
+  const W=320, H=170, PL=32, PR=10, PT=14, PB=26;
   const iw=W-PL-PR, ih=H-PT-PB;
   const vals = series.map(p=>p.kg);
   let mn=Math.min(...vals), mx=Math.max(...vals);
@@ -2960,33 +3363,6 @@ function bigLineChart(series, rangeLbl, o){
     series.map((p,i)=>`L${xOf(i).toFixed(1)} ${yOf(p.kg).toFixed(1)}`).join(" ") +
     ` L${xOf(series.length-1).toFixed(1)} ${(PT+ih).toFixed(1)} Z`;
   const dots = series.map((p,i)=>`<circle cx="${xOf(i).toFixed(1)}" cy="${yOf(p.kg).toFixed(1)}" r="3.2" fill="var(--bg)" stroke="var(--amber)" stroke-width="2"/>`).join("");
-
-  /* PR noktalari: o gune kadarki en iyi e1RM'in kirildigi seanslar.
-     Buyuk dolu amber nokta; sonuncusuna deger etiketi. */
-  let prMarks = "";
-  (o.prs||[]).forEach((idx,k)=>{
-    if(idx<0 || idx>=series.length) return;
-    const x=xOf(idx), y=yOf(series[idx].kg);
-    const last = k === o.prs.length-1;
-    prMarks += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5.5" fill="var(--amber)" stroke="var(--bg)" stroke-width="2"/>`;
-    const lbl = last ? `PR ${o.fmt(series[idx].kg)}` : "PR";
-    const anchor = x > W-46 ? "end" : (x < PL+20 ? "start" : "middle");
-    prMarks += `<text x="${x.toFixed(1)}" y="${Math.max(10,(y-10)).toFixed(1)}" text-anchor="${anchor}" font-size="9" fill="var(--amber)" font-weight="${last?'800':'700'}">${lbl}</text>`;
-  });
-
-  /* RPE seridi: grafikle ayni x ekseninde kucuk cubuklar.
-     <=7.5 sonuk, 8-9 amber, >=9.5 kirmizi — set ekranindaki renk diliyle ayni. */
-  let rpeRow = "";
-  if(hasRpe){
-    const by = H-24, bh = v => 4 + Math.max(0, Math.min(1,(v-6)/4))*10;
-    rpeRow += `<text x="${PL-4}" y="${by+4}" text-anchor="end" font-size="8" fill="var(--faint)" font-weight="700">RPE</text>`;
-    o.rpe.forEach((v,i)=>{
-      if(v==null) return;
-      const col = v>=9.5 ? "var(--red)" : v>=8 ? "var(--amber)" : "var(--faint)";
-      const h = bh(v);
-      rpeRow += `<rect x="${(xOf(i)-3).toFixed(1)}" y="${(by+7-h).toFixed(1)}" width="6" height="${h.toFixed(1)}" rx="1.5" fill="${col}" opacity="${v>=8?'0.9':'0.55'}"/>`;
-    });
-  }
   const step = Math.max(1, Math.ceil(series.length/5));
   const xl = series.map((p,i)=>(i%step===0||i===series.length-1)?
     `<text x="${xOf(i).toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="9" fill="var(--muted)" font-weight="600">${trDate(p.date)}</text>`:'').join("");
@@ -2996,14 +3372,14 @@ function bigLineChart(series, rangeLbl, o){
   const delta = now-first;
   return `<div class="chartbox">
     <div class="hd">
-      <div><div class="l">${o.label}</div><div class="big">${o.fmt(now)}<small>${o.unit}</small></div><div class="tag">Mevcut</div></div>
-      <div class="right"><div class="chg ${delta>=0?'up':'dn'}">${delta>=0?'+':''}${o.fmt(delta)} ${o.unit}</div><div class="sub2">Son ${rangeLbl||''}</div></div>
+      <div><div class="l">Çalışma Ağırlığı</div><div class="big">${fmtKg(now)}<small>kg</small></div><div class="tag">Mevcut</div></div>
+      <div class="right"><div class="chg ${delta>=0?'up':'dn'}">${delta>=0?'+':''}${fmtKg(delta)} kg</div><div class="sub2">${F("Son {r}",{r:rangeLbl||""})}</div></div>
     </div>
     <svg class="chartsvg" viewBox="0 0 ${W} ${H}">
       ${grid}
       <path d="${area}" fill="var(--amber)" opacity=".08"/>
       <path d="${d}" fill="none" stroke="var(--amber)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-      ${dots}${prMarks}${rpeRow}${xl}
+      ${dots}${xl}
     </svg>
   </div>`;
 }
@@ -3014,20 +3390,37 @@ function progressVucut(){
   const last = log[log.length-1];
   const diff = (first && last) ? last.kg - first.kg : 0;
   const chart = log.length >= 2 ? bwChart(log) : `<div class="chartbox"><div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Grafik için en az 2 kayıt gerekli</div></div>`;
-  const rows = log.slice().reverse().slice(0,10).map(b=>`<div class="hrow" style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);font-size:14px">
+  const rows = log.slice().reverse().slice(0,30).map(b=>`<div class="hrow" style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);font-size:14px">
     <div style="color:var(--muted)">${trDateLong(b.date)}</div>
-    <div style="font-family:var(--f-num);font-weight:700">${fmtKg(b.kg)} kg</div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <span style="font-family:var(--f-num);font-weight:700">${fmtKg(b.kg)} kg</span>
+      <button onclick="delBw('${b.date}')" aria-label="Sil"
+        style="background:none;border:0;color:var(--faint);font-size:17px;line-height:1;padding:2px 4px;cursor:pointer">×</button>
+    </div>
   </div>`).join("");
   return `
     <div class="card">
-      <div class="row"><div class="lbl">Bugünkü kilon</div>
+      <div class="row"><div class="lbl">Kilo</div>
         <div><input type="number" inputmode="decimal" id="newbw" step="0.1" placeholder="${fmtKg(S.bodyweight)}" style="width:110px"> <span style="color:var(--muted)">kg</span></div>
       </div>
+      <div class="row"><div class="lbl">Tarih</div>
+        <div><input type="date" id="newbwdate" value="${todayISO()}" max="${todayISO()}" onchange="render()" style="width:150px"></div>
+      </div>
+      ${bwDateHint()}
       <button class="btn sm" style="margin-top:12px" onclick="logBw()">Kaydet</button>
     </div>
     ${chart}
     ${rows ? `<div class="card"><div class="settbl-title" style="padding:0 0 6px">Geçmiş</div>${rows}</div>` : ''}
   `;
+}
+/* Gecmis bir tarih secildiyse guncel kilonun degismeyecegini soyle.
+   Bu ayrim onemli: S.bodyweight "su anki kilon", 6 ay oncesi onu bozmamali. */
+function bwDateHint(){
+  const el = document.getElementById("newbwdate");
+  const v = el ? el.value : todayISO();
+  if(!v || v === todayISO()) return "";
+  return `<div style="background:var(--cell);border-radius:9px;padding:8px 10px;margin-top:10px;
+    color:var(--faint);font-size:11px;line-height:1.5">Geçmiş bir tarih seçtin — bu kayıt grafiğe eklenir, güncel kilon değişmez.</div>`;
 }
 function bwChart(log){
   const W=320,H=170,PL=32,PR=10,PT=14,PB=26;
@@ -3036,7 +3429,12 @@ function bwChart(log){
   let mn=Math.min(...vals), mx=Math.max(...vals);
   if(mn===mx){mn-=2;mx+=2;}
   const pad=(mx-mn)*0.15; mn-=pad; mx+=pad;
-  const xOf=i=>PL+(log.length<=1?iw/2:(i/(log.length-1))*iw);
+  /* X ekseni tarihe orantili. Sira bazli olsaydi 1 ay ile 3 gunluk
+     bosluk ayni genislikte cizilir, dususun hizi yanlis gorunurdu. */
+  const tms = log.map(b=>new Date(b.date).getTime());
+  const t0 = tms[0], t1 = tms[tms.length-1];
+  const span = t1 - t0;
+  const xOf=i=>PL+(log.length<=1||span<=0?iw/2:((tms[i]-t0)/span)*iw);
   const yOf=v=>PT+ih-((v-mn)/(mx-mn))*ih;
   let grid="";
   for(let i=0;i<=3;i++){
@@ -3049,8 +3447,18 @@ function bwChart(log){
     log.map((b,i)=>`L${xOf(i).toFixed(1)} ${yOf(b.kg).toFixed(1)}`).join(" ") +
     ` L${xOf(log.length-1).toFixed(1)} ${(PT+ih).toFixed(1)} Z`;
   const dots = log.map((b,i)=>`<circle cx="${xOf(i).toFixed(1)}" cy="${yOf(b.kg).toFixed(1)}" r="3.2" fill="var(--bg)" stroke="var(--amber)" stroke-width="2"/>`).join("");
-  const step = Math.max(1, Math.ceil(log.length/5));
-  const xl = log.map((b,i)=>(i%step===0||i===log.length-1)?
+  /* Etiketleri indekse gore degil, X mesafesine gore seyrelt — noktalar
+     artik esit araliklarla durmuyor, yoksa ust uste binerler. */
+  let lastX = -999;
+  const keep = log.map((b,i)=>{
+    if(i===log.length-1) return true;
+    if(xOf(i)-lastX < 52) return false;
+    lastX = xOf(i); return true;
+  });
+  if(log.length>1 && xOf(log.length-1)-lastX < 52){
+    for(let i=log.length-2;i>=0;i--){ if(keep[i]){ keep[i]=false; break; } }
+  }
+  const xl = log.map((b,i)=>keep[i]?
     `<text x="${xOf(i).toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="9" fill="var(--muted)" font-weight="600">${trDate(b.date)}</text>`:'').join("");
   const diff = log[log.length-1].kg - log[0].kg;
   return `<div class="chartbox">
@@ -3069,10 +3477,20 @@ function bwChart(log){
 window.logBw = function(){
   const v = parseFloat(document.getElementById("newbw").value);
   if(!(v>0)) return;
-  S.bodyweight = v;
-  const t = todayISO();
+  const el = document.getElementById("newbwdate");
+  const t = (el && el.value) ? el.value : todayISO();
+  if(t > todayISO()) return;              // ileri tarih yok
+  if(t === todayISO()) S.bodyweight = v;  // guncel kilo sadece bugunku olcumle degisir
   const ex = S.bwLog.find(b=>b.date===t);
   if(ex) ex.kg = v; else S.bwLog.push({date:t, kg:v});
+  S.bwLog.sort((a,b)=> a.date<b.date?-1:1);
+  save(); render();
+};
+window.delBw = function(date){
+  const i = S.bwLog.findIndex(b=>b.date===date);
+  if(i<0) return;
+  if(!confirm(fillT(DEL_BW[S.lang] || DEL_BW.tr, {d:trDateLong(date), kg:fmtKg(S.bwLog[i].kg)}))) return;
+  S.bwLog.splice(i,1);
   save(); render();
 };
 
@@ -3099,7 +3517,7 @@ function progressPerformans(){
   return `<div class="chartbox">
     <div class="hd">
       <div><div class="l">Hazırlık Skoru</div><div class="r">${scores[scores.length-1]}</div></div>
-      <div style="font-size:11px;color:var(--muted);font-weight:600">Ort. ${avg}</div>
+      <div style="font-size:11px;color:var(--muted);font-weight:600">${F("Ort. {v}",{v:avg})}</div>
     </div>
     <svg class="chartsvg" viewBox="0 0 ${W} ${H}">
       ${grid}
@@ -3126,8 +3544,8 @@ function renderSettings(){
       const coarse = isCoarse(ex);
       const pinned = hasStep(ex);
       const sub = coarse
-        ? `<small style="color:var(--amber)">Kaba kademe · ${fmtKg(stepOf(ex))} kg · tekrarla ilerler</small>`
-        : `<small>Artış: ${fmtKg(incOf(ex))} kg${pinned?` · kademe ${fmtKg(stepOf(ex))} kg`:''}</small>`;
+        ? `<small style="color:var(--amber)">${F("Kaba kademe · {v} kg · tekrarla ilerler",{v:fmtKg(stepOf(ex))})}</small>`
+        : `<small>${F("Artış: {v} kg",{v:fmtKg(incOf(ex))})}${pinned?F(" · kademe {v} kg",{v:fmtKg(stepOf(ex))}):''}</small>`;
       return `<div class="settings-ex">
         <div class="nm">${esc(ex.n)}${sub}</div>
         <div class="in">
@@ -3149,15 +3567,22 @@ function renderSettings(){
     <div class="hero"><div class="name">Ayarlar</div></div>
     ${warn}
     <div class="card">
+      <div class="row" style="align-items:flex-start">
+        <div class="lbl">Dil / Language / Kieli</div></div>
+      <div class="langseg">
+        ${Object.keys(LANGS).map(l=>`<button class="${S.lang===l?'on':''}" onclick="setLang('${l}')">${LANGS[l]}</button>`).join("")}
+      </div>
+    </div>
+    <div class="card">
       <div class="row"><div class="lbl">Ad</div>
         <div><input type="text" value="${esc(S.name||'')}" onchange="S.name=this.value; save()" placeholder="—" style="width:140px;text-align:left"></div></div>
       <div class="row"><div class="lbl">Vücut ağırlığı</div>
         <div><input type="number" inputmode="decimal" step="0.1" value="${S.bodyweight}" onchange="setBw(this.value)"> <span style="color:var(--muted)">kg</span></div></div>
       <div class="row"><div class="lbl">Sıradaki antrenman</div>
-        <div><button class="btn sm ghost" style="width:auto;padding:9px 14px" onclick="cycleNext()">${nextName} ⟳</button></div></div>
+        <div><button class="btn sm ghost" style="width:auto;padding:9px 14px" onclick="cycleNext()">${T(nextName)} ⟳</button></div></div>
       <div class="row"><div class="lbl">Mola zili</div>
         <div><button class="btn sm ghost" style="width:auto;padding:9px 14px;${S.restBell?'color:var(--amber);border-color:var(--amber)':''}"
-          onclick="toggleBell()">${S.restBell?'Açık':'Kapalı'}</button></div></div>
+          onclick="toggleBell()">${S.restBell?T("Açık"):T("Kapalı")}</button></div></div>
     </div>
     <p class="note">Mola zili: süre bitince ses çalar. Açıkken mola boyunca çok kısık bir ses çalar — bu olmadan iPhone sayfayı dondurur ve zil hiç çalmaz. Podcast veya müziğini duraklatabilir, telefon sessiz moddayken de duyulmaz. Sayaç, zil kapalıyken de doğru çalışır.</p>
     <p class="note">Ağırlık: bir sonraki antrenmanda kullanacağın kilo. Artış: hedefi tutturduğunda eklenecek kilo. Kademe alanı sadece pinli makinelerde (Biceps, Triceps) görünür — o makinede gerçekten seçilebilen en küçük adım. Kademe, ağırlığın %10'undan büyükse hareket kaba kademe moduna geçer: ağırlık her antrenman artmaz, önce tekrarlar tavana çıkar, sonra tek seferde bir kademe atlanır. Plakalı makineler bu moda hiç girmez.</p>
@@ -3173,15 +3598,6 @@ function renderSettings(){
       </div>
     </div>
     <p class="note">Salonunda bulunan plakaları seç. Hareket ekranındaki hesap bunlara göre yapılır. Tek taraf / toplam ayarını her hareketin kendi ekranından değiştirebilirsin.</p>
-    <div class="divider"></div>
-    <h2>Hata Günlüğü</h2>
-    <div class="card">
-      ${errLog().length ? errLog().map(e=>`<div style="padding:8px 0;border-bottom:1px solid var(--line);font-size:12px">
-          <div style="color:var(--muted)">${esc(e.t)} · satır ${esc(e.l)}</div>
-          <div style="word-break:break-word">${esc(e.m)}</div>
-        </div>`).join("") : `<p class="note" style="margin:8px 0">Kayıtlı hata yok. Uygulamada bir şey ters giderse burada görünür.</p>`}
-      ${errLog().length ? `<button class="btn ghost sm" style="margin:10px 0 6px" onclick="clearErrLog()">Günlüğü Temizle</button>` : ``}
-    </div>
     <div class="divider"></div>
     <h2>Veri</h2>
     <button class="btn ghost sm" style="margin-bottom:10px" onclick="exportData()">Verilerimi Dışa Aktar (JSON)</button>
@@ -3227,14 +3643,14 @@ window.importData = function(ev){
     clear();
     let data;
     try { data = JSON.parse(reader.result); }
-    catch(e){ alert("Dosya okunamadı. Geçerli JSON değil.\n\n"+(e && e.message ? e.message : "")); return; }
+    catch(e){ alert(T("Dosya okunamadı. Geçerli JSON değil.")+"\n\n"+(e && e.message ? e.message : "")); return; }
     if(typeof data !== "object" || data === null ||
        !("weights" in data) || !("sessions" in data) || !Array.isArray(data.sessions)){
-      alert("Bu dosya bir antrenman yedeği gibi görünmüyor.");
+      alert(T("Bu dosya bir antrenman yedeği gibi görünmüyor."));
       return;
     }
     const nSess = data.sessions.length;
-    if(!confirm(`Yedek bulundu:\n• ${nSess} antrenman kaydı\n• Vücut ağırlığı: ${data.bodyweight ?? '—'} kg\n\nMevcut verinin ÜZERİNE yazılacak. Devam edilsin mi?`)) return;
+    if(!confirm(fillT(FOUND_MSG[S.lang] || FOUND_MSG.tr, {n:nSess, bw:(data.bodyweight ?? '—')}))) return;
     S = Object.assign(blank(), data);
     if(typeof S.nextIdx !== "number" || S.nextIdx<0) S.nextIdx = 0;
     S.nextIdx = S.nextIdx % 3;
@@ -3244,9 +3660,9 @@ window.importData = function(ev){
     S.setup = true;
     applyImported(nSess);
   };
-  reader.onerror = () => { clear(); alert("Dosya okunurken hata oluştu: " + (reader.error && reader.error.name ? reader.error.name : "bilinmeyen")); };
+  reader.onerror = () => { clear(); alert(T("Dosya okunurken hata oluştu: ") + (reader.error && reader.error.name ? reader.error.name : T("bilinmeyen"))); };
   try{ reader.readAsText(file); }
-  catch(e){ clear(); alert("Dosya açılamadı: " + (e && e.message ? e.message : "")); }
+  catch(e){ clear(); alert(T("Dosya açılamadı: ") + (e && e.message ? e.message : "")); }
 };
 
 /* shared tail for both file- and paste-based import */
@@ -3263,9 +3679,9 @@ function applyImported(nSess){
     verified = Array.isArray(back.sessions) ? back.sessions.length : 0;
   }catch(e){}
   if(verified === nSess){
-    alert(`Geri yükleme tamamlandı. ${nSess} antrenman kaydı yüklendi.`);
+    alert(fillT(DONE_MSG[S.lang] || DONE_MSG.tr, {n:nSess}));
   } else {
-    alert("Veriler ekrana yüklendi ama kalıcı olarak kaydedilemedi.\n\nSayfayı yenilersen kaybolur. Uygulamayı GitHub Pages adresinden açıp tekrar dene.");
+    alert(T("Veriler ekrana yüklendi ama kalıcı olarak kaydedilemedi.\n\nSayfayı yenilersen kaybolur. Uygulamayı GitHub Pages adresinden açıp tekrar dene."));
   }
 }
 
@@ -3277,17 +3693,17 @@ window.pasteImport = function(){
 window.doPasteImport = function(){
   const ta = document.getElementById("pasteArea");
   const txt = (ta && ta.value || "").trim();
-  if(!txt){ alert("Önce yedek metnini kutuya yapıştır."); return; }
+  if(!txt){ alert(T("Önce yedek metnini kutuya yapıştır.")); return; }
   let data;
   try{ data = JSON.parse(txt); }
-  catch(e){ alert("Yapıştırdığın metin geçerli JSON değil.\n\n"+(e && e.message ? e.message : "")); return; }
+  catch(e){ alert(T("Yapıştırdığın metin geçerli JSON değil.")+"\n\n"+(e && e.message ? e.message : "")); return; }
   if(typeof data !== "object" || data === null ||
      !("weights" in data) || !("sessions" in data) || !Array.isArray(data.sessions)){
-    alert("Bu metin bir antrenman yedeği gibi görünmüyor.");
+    alert(T("Bu metin bir antrenman yedeği gibi görünmüyor."));
     return;
   }
   const nSess = data.sessions.length;
-  if(!confirm(`Yedek bulundu:\n• ${nSess} antrenman kaydı\n• Vücut ağırlığı: ${data.bodyweight ?? '—'} kg\n\nMevcut verinin ÜZERİNE yazılacak. Devam edilsin mi?`)) return;
+  if(!confirm(fillT(FOUND_MSG[S.lang] || FOUND_MSG.tr, {n:nSess, bw:(data.bodyweight ?? '—')}))) return;
   S = Object.assign(blank(), data);
   if(typeof S.nextIdx !== "number" || S.nextIdx<0) S.nextIdx = 0;
   S.nextIdx = S.nextIdx % 3;
@@ -3298,8 +3714,8 @@ window.doPasteImport = function(){
   applyImported(nSess);
 };
 window.resetAll = function(){
-  if(!confirm("Tüm veriler silinecek. Emin misin?")) return;
-  if(!confirm("Son kez soruyorum — bu geri alınamaz. Sil?")) return;
+  if(!confirm(T("Tüm veriler silinecek. Emin misin?"))) return;
+  if(!confirm(T("Son kez soruyorum — bu geri alınamaz. Sil?"))) return;
   localStorage.removeItem(KEY); S = blank(); view="home"; render();
 };
 
@@ -3339,6 +3755,7 @@ function renderRest(){
     <button onclick="addRest(30)">+30sn</button>
     <button onclick="stopRest()">×</button>
   </div>`;
+  txDom($rest);
 }
 /* Uygulamaya geri donuldugu an dogru rakami goster (250ms bekleme). */
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) renderRest(); });
@@ -3540,7 +3957,7 @@ function restoreLiveSession(){
   const agoTxt = ago == null ? "" : ago < 60 ? ` (${ago} dk önce başladı)` :
                  ` (${Math.round(ago/60)} saat önce başladı)`;
   setTimeout(()=>{
-    const cont = confirm(`Yarım kalmış bir ${PROGRAM[live.w].name} antrenmanın var${agoTxt}.\n\nKaldığın yerden devam etmek ister misin?\n\nTamam = devam et\nİptal = bu antrenmanı sil`);
+    const cont = confirm(fillT(MSG[S.lang] || MSG.tr, {w:PROGRAM[live.w].name, ago:agoTxt}));
     if(!cont){ live = null; view = "home"; save(); }
     render();
   }, 100);
@@ -3566,6 +3983,7 @@ function seedMissingWeights(){
 }
 
 function runMigrations(){
+  if(!S.lang || !LANGS[S.lang]) S.lang = "tr";
   migrateSideToTotal();   // once birim duzeltmesi, sonra digerleri
   migrateB2u();
   migrateTieredRecalibration();
@@ -3581,6 +3999,7 @@ checkStorage();
 load();
 restoreLiveSession();     // migration'lardan ONCE — onlar save() cagiriyor ve
 runMigrations();          // o anda bellekteki live henuz null oldugu icin
+if(S.lang && LANGS[S.lang]) document.documentElement.setAttribute("lang", S.lang);
 render();                 // diskteki kaydi silerlerdi
 window.addEventListener("beforeunload", e => { if(live){ e.preventDefault(); e.returnValue=""; } });
 </script>
