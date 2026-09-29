@@ -406,10 +406,6 @@ textarea#pasteArea{width:100%;min-height:150px;background:var(--cell);border:1px
   color:var(--text);border-radius:12px;padding:12px;font-family:var(--fn);font-size:12px;
   line-height:1.5;resize:vertical}
 textarea#pasteArea:focus{outline:2px solid var(--amber);outline-offset:-1px}
-.langseg{display:flex;gap:3px;background:var(--cell);border-radius:12px;padding:3px;margin:2px 0 4px}
-.langseg button{flex:1;padding:9px 0;border:0;border-radius:10px;background:transparent;color:var(--muted);
-  font-family:var(--f);font-size:13px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.langseg button.on{background:var(--amber);color:#412402}
 .warnbox{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.35);border-radius:14px;
   padding:14px 16px;margin-bottom:14px;font-size:12.5px;line-height:1.55;color:var(--text)}
 .warnbox b{color:var(--red)}
@@ -510,6 +506,11 @@ body.resting #app{padding-bottom:calc(var(--nav-h) + 110px)}
 
 <script>
 "use strict";
+
+/* Virgullu giris (130,45) — iPhone Turkce klavyede type=number virgulu yutuyor,
+   bu yuzden ondalik alanlar text+inputmode=decimal; burada virgul noktaya cevrilir. */
+function pf(v){ return parseFloat(String(v==null?"":v).trim().replace(",",".")); }
+
 
 
 /* =========================================================
@@ -892,7 +893,6 @@ const RPE_LABELS = {
    ========================================================= */
 const KEY = "antrenman_v1";
 const blank = () => ({
-  lang: "tr",
   bodyweight: 134,
   weights: {},
   incs: {},
@@ -936,7 +936,7 @@ function save(){
   }
   catch(e){
     storageOK = false;
-    alert(T("Veri kaydedilemedi.\n\nTarayıcı bu sayfada depolamaya izin vermiyor. Dosyayı bilgisayardan açtıysan (adres çubuğunda file:// yazıyorsa) bu normaldir — GitHub Pages adresinden aç."));
+    alert("Veri kaydedilemedi.\n\nTarayıcı bu sayfada depolamaya izin vermiyor. Dosyayı bilgisayardan açtıysan (adres çubuğunda file:// yazıyorsa) bu normaldir — GitHub Pages adresinden aç.");
     return false;
   }
 }
@@ -1184,7 +1184,7 @@ function plateCounts(list){
 
 function plateListText(perSide){
   const r = platesFor(perSide);
-  if(!r.plates.length) return T("boş");
+  if(!r.plates.length) return "boş";
   const c = plateCounts(r.plates);
   return Object.keys(c).map(Number).sort((a,b)=>b-a)
     .map(p => c[p]>1 ? c[p]+"×"+fmtP(p) : fmtP(p)).join("+");
@@ -1300,8 +1300,8 @@ function plateCard(ex, kg){
   if(ref != null && Math.abs(ref-per) > 0.01){
     const d = plateDiff(ref, per);
     const parts = [];
-    if(d.add.length) parts.push(T("ekle ")+d.add.join(" + "));
-    if(d.rem.length) parts.push(T("çıkar ")+d.rem.join(" + "));
+    if(d.add.length) parts.push("ekle "+d.add.join(" + "));
+    if(d.rem.length) parts.push("çıkar "+d.rem.join(" + "));
     if(parts.length) delta = `<div class="delta ${per>ref?'up':'dn'}">${per>ref?'▲':'▼'} ${refLbl}, her tarafa ${parts.join(" · ")}</div>`;
   }
 
@@ -1364,14 +1364,13 @@ function greet(){
   const h = new Date().getHours();
   return h<6?"İyi Geceler":h<12?"Günaydın":h<18?"İyi Günler":"İyi Akşamlar";
 }
-function loc(){ return LOCALE[S.lang] || "tr-TR"; }
-function trDate(d){ return new Date(d).toLocaleDateString(loc(),{day:"numeric",month:"short"}); }
-function trDateLong(d){ return new Date(d).toLocaleDateString(loc(),{day:"numeric",month:"long"}); }
+function trDate(d){ return new Date(d).toLocaleDateString("tr-TR",{day:"numeric",month:"short"}); }
+function trDateLong(d){ return new Date(d).toLocaleDateString("tr-TR",{day:"numeric",month:"long"}); }
 function daysAgo(d){
   const diff = Math.floor((Date.now() - new Date(d).getTime())/(86400000));
-  if(diff === 0) return T("Bugün");
-  if(diff === 1) return T("Dün");
-  return diff + T(" gün önce");
+  if(diff === 0) return "Bugün";
+  if(diff === 1) return "Dün";
+  return diff + " gün önce";
 }
 
 /* Readiness score 0-100 from latest readiness entry today */
@@ -1423,383 +1422,6 @@ const $rest = document.getElementById("rest");
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fmtKg = v => (v == null ? "—" : (Math.round(v*100)/100).toString());
 
-/* =========================================================
-   DİL / LANGUAGE / KIELI
-   Anahtar = Türkçe kaynak metin. Karşılığı yoksa Türkçe'ye düşer,
-   yani yarım çeviri ekranı bozmaz. Türkçe seçiliyken hiç iş yapılmaz.
-   ========================================================= */
-const LANGS = { tr:"Türkçe", en:"English", fi:"Suomi" };
-const LOCALE = { tr:"tr-TR", en:"en-GB", fi:"fi-FI" };
-
-const TRS = {
-en:{
-/* --- ek metinler --- */
-"Tarih":"Date","Sil":"Delete","Geçmiş bir tarih seçtin — bu kayıt grafiğe eklenir, güncel kilon değişmez.":"You picked a past date — this entry is added to the chart, your current weight is unchanged.",
-
-"set":"sets","egzersiz":"exercises","devam":"to go","tamamlandı":"done","kalan":"left",
-
-"Ağırlık: bir sonraki antrenmanda kullanacağın kilo. Artış: hedefi tutturduğunda eklenecek kilo. Kademe alanı sadece pinli makinelerde (Biceps, Triceps) görünür — o makinede gerçekten seçilebilen en küçük adım. Kademe, ağırlığın %10'undan büyükse hareket kaba kademe moduna geçer: ağırlık her antrenman artmaz, önce tekrarlar tavana çıkar, sonra tek seferde bir kademe atlanır. Plakalı makineler bu moda hiç girmez.":"Weight: the load you'll use in your next workout. Increment: the load added when you hit the target. The step field only appears on pin-loaded machines (Biceps, Triceps) — the smallest jump that machine actually offers. If the step is larger than 10% of the weight, the exercise switches to coarse-step mode: the weight doesn't rise every workout; reps climb to the top of the range first, then one step is taken in a single jump. Plate-loaded machines never enter this mode.",
-"Mola zili: süre bitince ses çalar. Açıkken mola boyunca çok kısık bir ses çalar — bu olmadan iPhone sayfayı dondurur ve zil hiç çalmaz. Podcast veya müziğini duraklatabilir, telefon sessiz moddayken de duyulmaz. Sayaç, zil kapalıyken de doğru çalışır.":"Rest bell: a sound plays when the timer ends. While it's on, a very quiet tone plays throughout the rest — without it the iPhone freezes the page and the bell never rings. It may pause your podcast or music, and it won't be heard when the phone is on silent. The timer works correctly with the bell off too.",
-"Salonunda bulunan plakaları seç. Hareket ekranındaki hesap bunlara göre yapılır. Tek taraf / toplam ayarını her hareketin kendi ekranından değiştirebilirsin.":"Pick the plates your gym has. The calculation on the exercise screen is based on these. You can change the per-side / total setting from each exercise's own screen.",
-"Veriler sadece bu telefonda saklanır, hiçbir yere gönderilmez. Safari geçmişini temizlerken \"Web Sitesi Verileri\"ni silersen kayıtlar da gider — arada bir dışa aktarıp yedek alman iyi olur.":"Your data is stored only on this phone and is never sent anywhere. If you clear \"Website Data\" while clearing Safari history, the records go too — it's worth exporting a backup now and then.",
-"hacim":"volume",
-"toplam":"total",
-/* --- gezinme + ekran başlıkları --- */
-"Ana Sayfa":"Home","Antrenmanlar":"Workouts","Geçmiş":"History","İlerleme":"Progress","Ayarlar":"Settings",
-"Antrenman":"Workout","Antrenman A":"Workout A","Antrenman B":"Workout B","Antrenman C":"Workout C",
-"Bilinmeyen antrenman":"Unknown workout",
-/* --- selamlama + tarih --- */
-"İyi Geceler":"Good night","Günaydın":"Good morning","İyi Günler":"Good afternoon","İyi Akşamlar":"Good evening",
-"Bugün":"Today","Dün":"Yesterday"," gün önce":" days ago","bugün":"today","önceki":"previous","sonraki":"next",
-"dk":"min","Sporcu":"Athlete",
-/* --- ana ekran --- */
-"Bugünkü Antrenman":"Today's workout","Bugünkü Hazırlık":"Today's readiness","Hazırlık Skorun":"Your readiness score",
-"Hazırlık Skoru":"Readiness score","Hazırlık":"Readiness","Hazırlığını gir":"Log your readiness",
-"Hazırlık skorunu gir →":"Log your readiness →","Bu Hafta":"This week","Son Antrenman":"Last workout",
-"Hızlı Özet":"Quick summary","Toplam Hacim":"Total volume","Toplam Set":"Total sets","Süre":"Duration",
-"Antrenman Hacmi":"Training volume","Sıradaki":"Next","Sıradaki antrenman":"Next workout",
-"BAŞLA":"START","BAŞLA ›":"START ›","Bu antrenmanı başlat":"Start this workout",
-"Program A → B → C sırasıyla döner. İstersen sıradakini atlayıp başka antrenman başlatabilirsin.":"The program cycles A → B → C. You can skip ahead and start a different workout if you want.",
-/* --- hazırlık ekranı --- */
-"Bugün kendini nasıl hissediyorsun? Her birini 1-5 arası kaydır.":"How do you feel today? Slide each one from 1 to 5.",
-"Uyku":"Sleep","Enerji":"Energy","Stres":"Stress","Kas Ağrısı":"Soreness",
-"Harika görünüyorsun. Bugün ağırlığı zorlayabilirsin.":"You look great. You can push the weight today.",
-"İyi görünüyorsun. Devam!":"Looking good. Keep going!",
-"Orta. Isınmaya daha çok zaman ayır.":"Middling. Spend more time warming up.",
-"Dinlenme gerekebilir. Bugün hafif tut.":"You may need rest. Keep it light today.",
-/* --- antrenman ekranı --- */
-"Set":"Set","Tekrar":"Reps","Hedef":"Target","Hedef RPE":"Target RPE","Isınma Setleri":"Warm-up sets",
-"Çalışma Setleri":"Work sets","Çalışma Ağırlığı":"Working weight","Isınmadan":"From warm-up","Tekrar sayısı:":"Reps:",
-"Temizle":"Clear","Kaydet":"Save","ANTRENMANI BİTİR":"FINISH WORKOUT","SONRAKİ HAREKET":"NEXT EXERCISE",
-"ANTRENMANA DÖN":"BACK TO WORKOUT","ANA SAYFAYA DÖN":"BACK TO HOME","RPE'siz devam et":"Continue without RPE",
-"Antrenman Tamamlandı":"Workout complete","Performans Özeti":"Performance summary","Geçen sefere göre":"vs last time",
-"Aynı —":"Same —","değişim yok":"no change","+30sn":"+30s","Her ":"Every ",
-/* --- RPE --- */
-"Kolay — 4+ tekrar kaldı":"Easy — 4+ reps left","Orta — 3 tekrar kaldı":"Moderate — 3 reps left",
-"Zor — 2 tekrar kaldı":"Hard — 2 reps left","Çok zor — 1 tekrar kaldı":"Very hard — 1 rep left",
-"Maksimum — daha yapamazdım":"Maximum — nothing left",
-"Kolay":"Easy","Orta":"Moderate","Zor":"Hard","Çok zor":"Very hard","Maks.":"Max",
-"4+ kaldı":"4+ left","3 kaldı":"3 left","2 kaldı":"2 left","1 kaldı":"1 left","yapamazdım":"nothing left",
-/* --- plaka hesabı --- */
-"Plakalar":"Plates","TOPLAM":"TOTAL","HER KOLA":"PER SIDE","PLAKA HESABI KAPALI":"PLATE CALCULATOR OFF",
-"plakasız":"no plates","boş":"empty","ekle ":"add ","çıkar ":"remove ","2 kat":"×2","Açık":"On","Kapalı":"Off",
-/* --- geçmiş --- */
-"Hareketler":"Exercises","Hareket Ağırlıkları":"Exercise weights","Vücut Ağırlığı":"Body weight",
-"Vücut ağırlığı":"Body weight","vücut ağırlığı":"body weight","Vücut ağırlığın":"Your body weight",
-"Bugünkü kilon":"Today's weight","Kilo":"Weight","Kg":"Kg","Vücut":"Body","aç":"open","gizle":"hide",
-/* --- ilerleme --- */
-"Genel Bakış":"Overview","Egzersizler":"Exercises","Performans":"Performance","Hacim":"Volume",
-"Tahmini 1RM":"Estimated 1RM","Başarı":"Success rate","Ort. Artış":"Avg. increase","Ort. RPE":"Avg. RPE",
-"Başlangıçtan":"Since start","Mevcut":"Current","Takıldı":"Stuck","Dikkat isteyen":"Needs attention",
-"4 hafta ilerleme":"4-week forecast","Tümü":"All","3 Ay":"3 mo","6 Ay":"6 mo","1 Yıl":"1 yr","4hf":"4wk",
-"Zamanla her hareketin çalışma ağırlığı":"Working weight of each exercise over time",
-"↗ hızlı":"↗ fast","↗ düzenli":"↗ steady","→ yavaşlıyor":"→ slowing","◆ dengelendi":"◆ levelled off",
-"Hedefi tutturuyorsun ama zorlanman sürekli yüksek. Sistem bu yüzden ağırlığı artırmıyor.":"You keep hitting the target but your effort stays high. That's why the system isn't adding weight.",
-/* --- boş durumlar --- */
-"Antrenman kaydettikçe burada özet oluşacak.":"A summary will build up here as you log workouts.",
-"Antrenman kaydettikçe egzersiz analizleri burada olacak.":"Exercise analysis will appear here as you log workouts.",
-"Birkaç antrenman sonra burada analiz görünecek.":"Analysis will appear here after a few workouts.",
-"Hazırlık skorunu düzenli girdikçe burada trend oluşacak.":"A trend will build up here as you log readiness regularly.",
-"Bu aralıkta yeterli veri yok":"Not enough data in this range",
-"Grafik için en az 2 kayıt gerekli":"At least 2 records are needed for a chart",
-"Grafik için en az 2 kayıtlı antrenman gerekli":"At least 2 logged workouts are needed for a chart",
-"Grafik için en az 2 kilo kaydı gerekli — İlerleme › Vücut'tan ekleyebilirsin":"At least 2 weight entries are needed for a chart — add them under Progress › Body",
-/* --- kurulum --- */
-"Başlangıç Ayarları":"Initial setup","Test Setleri":"Test sets","Programı Oluştur":"Create program",
-"Programı kur":"Set up program","Ad":"Name","Adın (isteğe bağlı)":"Your name (optional)",
-"Her hareket için rahatça kaldırabildiğin bir ağırlık ve tekrar sayısı gir. Uygulama bunlardan başlangıç ağırlıklarını hesaplar.":"For each exercise, enter a weight you can lift comfortably and how many reps you got. The app calculates your starting weights from these.",
-"Emin değilsen tahmini bir değer gir — program ilk hafta hafif başlar ve kendini hızlıca ayarlar.":"If you're unsure, put in an estimate — the program starts light in the first week and adjusts itself quickly.",
-/* --- ayarlar --- */
-"Mola zili":"Rest bell","Veri":"Data","Her Şeyi Sıfırla":"Reset everything",
-"Verilerimi Dışa Aktar (JSON)":"Export my data (JSON)","Yedekten Geri Yükle (JSON)":"Restore from backup (JSON)",
-"Yedeği Yapıştırarak Geri Yükle":"Restore by pasting a backup","Yapıştırılanı Yükle":"Load pasted data",
-"artış":"increment","kademe":"step","Veriler kaydedilemiyor.":"Your data can't be saved.",
-"Yedek dosyasını bir metin düzenleyicide aç, tümünü kopyala ve buraya yapıştır…":"Open the backup file in a text editor, copy all of it and paste it here…",
-"Dil":"Language",
-/* --- uyarılar --- */
-"Antrenmanı iptal et? Girdiğin veriler silinir.":"Cancel this workout? The data you entered will be deleted.",
-"Tüm veriler silinecek. Emin misin?":"All data will be deleted. Are you sure?",
-"Son kez soruyorum — bu geri alınamaz. Sil?":"Asking one last time — this can't be undone. Delete?",
-"Bu dosya bir antrenman yedeği gibi görünmüyor.":"This file doesn't look like a workout backup.",
-"Bu metin bir antrenman yedeği gibi görünmüyor.":"This text doesn't look like a workout backup.",
-"Bu sayı fazla yüksek görünüyor. En fazla 200 girebilirsin.":"That number looks too high. The maximum is 200.",
-"Önce yedek metnini kutuya yapıştır.":"Paste the backup text into the box first.",
-"Dosya okunamadı. Geçerli JSON değil.":"The file couldn't be read. It isn't valid JSON.",
-"Yapıştırdığın metin geçerli JSON değil.":"The text you pasted isn't valid JSON.",
-"Dosya açılamadı: ":"The file couldn't be opened: ","Dosya okunurken hata oluştu: ":"An error occurred while reading the file: ",
-"bilinmeyen":"unknown",
-"Veri kaydedilemedi.\n\nTarayıcı bu sayfada depolamaya izin vermiyor. Dosyayı bilgisayardan açtıysan (adres çubuğunda file:// yazıyorsa) bu normaldir — GitHub Pages adresinden aç.":"Your data couldn't be saved.\n\nThe browser isn't allowing storage on this page. If you opened the file from your computer (address bar shows file://) that's expected — open it from the GitHub Pages address instead.",
-"Veriler ekrana yüklendi ama kalıcı olarak kaydedilemedi.\n\nSayfayı yenilersen kaybolur. Uygulamayı GitHub Pages adresinden açıp tekrar dene.":"The data loaded on screen but couldn't be saved permanently.\n\nIt will be lost if you refresh. Open the app from the GitHub Pages address and try again.",
-/* --- hareket adları --- */
-"Üst Göğüs Makinesi (Eğik)":"Incline Chest Press Machine","Triceps Makinesi":"Triceps Machine",
-"Dumbbell Bench Press (arşiv)":"Dumbbell Bench Press (archived)","Leg Raises (arşiv)":"Leg Raises (archived)",
-"Plank (arşiv)":"Plank (archived)",
-/* --- form ipuçları --- */
-"Sırtını ve omuzlarını desteğe yasla":"Keep your back and shoulders against the pad",
-"Sırtını desteğe tam yasla":"Press your back flat into the pad",
-"Sırtını desteğe yasla, kalçan sabit":"Back against the pad, hips still",
-"Sırtını ve omuzlarını mindere tam yapıştır":"Keep your back and shoulders flat on the bench",
-"Göğsünü desteğe yasla":"Chest against the pad",
-"Göğsünü desteğe yasla, gövde sabit":"Chest against the pad, torso still",
-"Göğsünü açarak kolları birleştir":"Open your chest as you bring the arms together",
-"Göğsünü yukarı aç, hafif geriye yaslan":"Chest up, lean back slightly",
-"Göğüs yukarıda, bel doğal kavisinde":"Chest up, natural arch in the lower back",
-"Tutamaklar göğüs hizasında olsun":"Handles at chest height",
-"Tutamaklar omuz hizasında başlasın":"Start with the handles at shoulder height",
-"Tutamakları göğüs üst hizasında tut":"Keep the handles at upper-chest height",
-"Dambıllar göğüs hizasında, bilekler düz":"Dumbbells at chest height, wrists straight",
-"Kontrollü it, üstte kilitleme":"Press under control, don't lock out at the top",
-"Kontrollü indir, serbest bırakma":"Lower under control, don't let it drop",
-"Ağırlığı yavaş bırak, düşürme":"Release the weight slowly, don't drop it",
-"İnerken 2 saniyede kontrollü bırak":"Take 2 seconds to lower under control",
-"İnerken dirsekler 45 derece açıda":"Elbows at about 45 degrees on the way down",
-"İnerken belin kalkıyorsa daha az indir":"If your lower back lifts, don't go as deep",
-"Dirsekler gövdene yakın, sabit":"Elbows close to your body and still",
-"Dirsekler gövdene yapışık, sabit kalsın":"Keep your elbows tight to your body",
-"Dirsekler hafif bükük ve sabit":"Elbows slightly bent and fixed",
-"Dirsekler hafif bükük, omuz hizasına kadar kaldır":"Elbows slightly bent, raise to shoulder height",
-"Dirsekler hafif bükük, omuz hizasında aç":"Elbows slightly bent, open out at shoulder height",
-"Dirsekleri gövdeye yakın geriye çek":"Pull your elbows back close to your body",
-"Dirsekleri tam kilitleme, hafif bükük bırak":"Don't fully lock the elbows, leave a slight bend",
-"Yukarıda dirsekleri tam kilitleme":"Don't lock the elbows out at the top",
-"Aşağıda kolları tam uzat":"Fully extend your arms at the bottom",
-"Sadece ön kolun hareket etsin":"Only your forearm should move",
-"Bileği bükme, düz tut":"Don't bend the wrist, keep it straight",
-"Kürek kemiklerini birbirine sık":"Squeeze your shoulder blades together",
-"Kürek kemiklerini sık":"Squeeze your shoulder blades",
-"Kürekleri sıkarak kolları geriye götür":"Squeeze the shoulder blades as you take the arms back",
-"Omuzlarını sıkıştır, göğsü aç":"Set your shoulders back and open your chest",
-"Omuzlarını kulağına doğru kaldırma":"Don't shrug your shoulders towards your ears",
-"Kollarınla değil, sırtınla çek":"Pull with your back, not your arms",
-"Kollarınla çekme, karın kaslarını kullan":"Don't pull with your arms, use your abs",
-"Barı göğsünün üstüne doğru çek":"Pull the bar towards your upper chest",
-"Gövdeni geriye sallamadan çek":"Pull without swinging your torso back",
-"Ayaklar omuz genişliğinde, topuklar basılı":"Feet shoulder-width apart, heels planted",
-"Ayaklar platformda omuz genişliğinde":"Feet shoulder-width apart on the platform",
-"Dizler ayak parmaklarıyla aynı yönde":"Knees tracking in line with your toes",
-"Dizleri dışa doğru it":"Push your knees outwards",
-"Dizini sertçe kilitleme":"Don't slam your knee into lockout",
-"Diz eklemi makinenin dönme noktasıyla aynı hizada":"Line your knee joint up with the machine's pivot",
-"Belini yuvarlamadan in":"Go down without rounding your lower back",
-"Beli mindere yapışık tut, kalkma":"Keep your lower back on the pad, don't let it lift",
-"Belin yere yapışık, boşluk bırakma":"Lower back flat on the floor, no gap",
-"Kalçanı yukarı kaldırma, çökertme":"Don't lift or drop your hips",
-"Topukları geriye çekerken kalçanı sabit tut":"Keep your hips still as you curl your heels back",
-"Bacakları yavaş indir":"Lower your legs slowly",
-"Karnını sıkarak gövdeni öne kıvır":"Brace your abs and curl your torso forward",
-"Karnını ve kalçanı sık, normal nefes al":"Brace your abs and glutes, breathe normally",
-"Nefesini vererek kıvrıl":"Breathe out as you curl",
-"Vücudun baştan topuğa düz çizgi":"Straight line from head to heels",
-"Ortada bir saniye sık":"Squeeze for a second in the middle",
-"Yukarıda bir saniye bekle, kası sık":"Hold for a second at the top and squeeze"
-},
-fi:{
-/* --- lisätekstit --- */
-"Tarih":"Päivämäärä","Sil":"Poista","Geçmiş bir tarih seçtin — bu kayıt grafiğe eklenir, güncel kilon değişmez.":"Valitsit menneen päivän — merkintä lisätään kuvaajaan, nykyinen painosi ei muutu.",
-
-"set":"sarjaa","egzersiz":"liikettä","devam":"kesken","tamamlandı":"valmis","kalan":"jäljellä",
-
-"Ağırlık: bir sonraki antrenmanda kullanacağın kilo. Artış: hedefi tutturduğunda eklenecek kilo. Kademe alanı sadece pinli makinelerde (Biceps, Triceps) görünür — o makinede gerçekten seçilebilen en küçük adım. Kademe, ağırlığın %10'undan büyükse hareket kaba kademe moduna geçer: ağırlık her antrenman artmaz, önce tekrarlar tavana çıkar, sonra tek seferde bir kademe atlanır. Plakalı makineler bu moda hiç girmez.":"Paino: kuorma, jota käytät seuraavassa treenissä. Nousu: kuorma, joka lisätään kun osut tavoitteeseen. Porras-kenttä näkyy vain tappilaitteissa (hauis, ojentaja) — se on pienin askel, jonka laite oikeasti tarjoaa. Jos porras on yli 10 % painosta, liike siirtyy karkean portaan tilaan: paino ei nouse joka treenissä, vaan ensin toistot nousevat vaihteluvälin ylärajaan ja sitten otetaan yksi porras kerralla. Levykuormitteiset laitteet eivät koskaan siirry tähän tilaan.",
-"Mola zili: süre bitince ses çalar. Açıkken mola boyunca çok kısık bir ses çalar — bu olmadan iPhone sayfayı dondurur ve zil hiç çalmaz. Podcast veya müziğini duraklatabilir, telefon sessiz moddayken de duyulmaz. Sayaç, zil kapalıyken de doğru çalışır.":"Palautuskello: ääni soi, kun aika päättyy. Päällä ollessaan hyvin hiljainen ääni soi koko palautuksen ajan — ilman sitä iPhone jäädyttää sivun eikä kello soi lainkaan. Se voi keskeyttää podcastin tai musiikin, eikä sitä kuulu puhelimen ollessa äänettömällä. Ajastin toimii oikein myös kellon ollessa pois päältä.",
-"Salonunda bulunan plakaları seç. Hareket ekranındaki hesap bunlara göre yapılır. Tek taraf / toplam ayarını her hareketin kendi ekranından değiştirebilirsin.":"Valitse salillasi olevat levyt. Liikenäytön laskenta perustuu näihin. Per puoli / yhteensä -asetusta voit vaihtaa kunkin liikkeen omalta näytöltä.",
-"Veriler sadece bu telefonda saklanır, hiçbir yere gönderilmez. Safari geçmişini temizlerken \"Web Sitesi Verileri\"ni silersen kayıtlar da gider — arada bir dışa aktarıp yedek alman iyi olur.":"Tiedot tallennetaan vain tähän puhelimeen eikä niitä lähetetä minnekään. Jos tyhjennät Safarin historian yhteydessä \"Verkkosivustojen tiedot\", myös merkinnät katoavat — kannattaa viedä varmuuskopio silloin tällöin.",
-"hacim":"volyymi",
-"toplam":"yhteensä",
-/* --- navigointi + näyttöjen otsikot --- */
-"Ana Sayfa":"Etusivu","Antrenmanlar":"Treenit","Geçmiş":"Historia","İlerleme":"Kehitys","Ayarlar":"Asetukset",
-"Antrenman":"Treeni","Antrenman A":"Treeni A","Antrenman B":"Treeni B","Antrenman C":"Treeni C",
-"Bilinmeyen antrenman":"Tuntematon treeni",
-/* --- tervehdys + päivämäärä --- */
-"İyi Geceler":"Hyvää yötä","Günaydın":"Huomenta","İyi Günler":"Hyvää päivää","İyi Akşamlar":"Hyvää iltaa",
-"Bugün":"Tänään","Dün":"Eilen"," gün önce":" päivää sitten","bugün":"tänään","önceki":"edellinen","sonraki":"seuraava",
-"dk":"min","Sporcu":"Urheilija",
-/* --- etusivu --- */
-"Bugünkü Antrenman":"Päivän treeni","Bugünkü Hazırlık":"Päivän valmius","Hazırlık Skorun":"Valmiusarvosi",
-"Hazırlık Skoru":"Valmiusarvo","Hazırlık":"Valmius","Hazırlığını gir":"Kirjaa valmiutesi",
-"Hazırlık skorunu gir →":"Kirjaa valmiutesi →","Bu Hafta":"Tällä viikolla","Son Antrenman":"Viime treeni",
-"Hızlı Özet":"Pikakatsaus","Toplam Hacim":"Kokonaisvolyymi","Toplam Set":"Sarjoja yhteensä","Süre":"Kesto",
-"Antrenman Hacmi":"Treenivolyymi","Sıradaki":"Seuraava","Sıradaki antrenman":"Seuraava treeni",
-"BAŞLA":"ALOITA","BAŞLA ›":"ALOITA ›","Bu antrenmanı başlat":"Aloita tämä treeni",
-"Program A → B → C sırasıyla döner. İstersen sıradakini atlayıp başka antrenman başlatabilirsin.":"Ohjelma kiertää järjestyksessä A → B → C. Voit halutessasi ohittaa seuraavan ja aloittaa toisen treenin.",
-/* --- valmiusnäyttö --- */
-"Bugün kendini nasıl hissediyorsun? Her birini 1-5 arası kaydır.":"Miltä sinusta tuntuu tänään? Liu'uta jokainen välillä 1–5.",
-"Uyku":"Uni","Enerji":"Energia","Stres":"Stressi","Kas Ağrısı":"Lihaskipu",
-"Harika görünüyorsun. Bugün ağırlığı zorlayabilirsin.":"Näyttää hyvältä. Tänään voit painaa kunnolla.",
-"İyi görünüyorsun. Devam!":"Hyvältä näyttää. Jatka samaan malliin!",
-"Orta. Isınmaya daha çok zaman ayır.":"Keskinkertainen. Käytä lämmittelyyn enemmän aikaa.",
-"Dinlenme gerekebilir. Bugün hafif tut.":"Saatat tarvita lepoa. Pidä tämä päivä kevyenä.",
-/* --- treeninäyttö --- */
-"Set":"Sarja","Tekrar":"Toistot","Hedef":"Tavoite","Hedef RPE":"Tavoite-RPE","Isınma Setleri":"Lämmittelysarjat",
-"Çalışma Setleri":"Työsarjat","Çalışma Ağırlığı":"Työpaino","Isınmadan":"Lämmittelystä","Tekrar sayısı:":"Toistoja:",
-"Temizle":"Tyhjennä","Kaydet":"Tallenna","ANTRENMANI BİTİR":"LOPETA TREENI","SONRAKİ HAREKET":"SEURAAVA LIIKE",
-"ANTRENMANA DÖN":"TAKAISIN TREENIIN","ANA SAYFAYA DÖN":"TAKAISIN ETUSIVULLE","RPE'siz devam et":"Jatka ilman RPE:tä",
-"Antrenman Tamamlandı":"Treeni valmis","Performans Özeti":"Suoritusyhteenveto","Geçen sefere göre":"Edelliseen verrattuna",
-"Aynı —":"Sama —","değişim yok":"ei muutosta","+30sn":"+30 s","Her ":"Joka ",
-/* --- RPE --- */
-"Kolay — 4+ tekrar kaldı":"Helppo — 4+ toistoa jäi","Orta — 3 tekrar kaldı":"Kohtalainen — 3 toistoa jäi",
-"Zor — 2 tekrar kaldı":"Raskas — 2 toistoa jäi","Çok zor — 1 tekrar kaldı":"Erittäin raskas — 1 toisto jäi",
-"Maksimum — daha yapamazdım":"Maksimi — ei olisi tullut enempää",
-"Kolay":"Helppo","Orta":"Kohtalainen","Zor":"Raskas","Çok zor":"Erittäin raskas","Maks.":"Maksimi",
-"4+ kaldı":"4+ jäi","3 kaldı":"3 jäi","2 kaldı":"2 jäi","1 kaldı":"1 jäi","yapamazdım":"ei enempää",
-/* --- levylaskuri --- */
-"Plakalar":"Levyt","TOPLAM":"YHTEENSÄ","HER KOLA":"PER PUOLI","PLAKA HESABI KAPALI":"LEVYLASKURI POIS",
-"plakasız":"ei levyjä","boş":"tyhjä","ekle ":"lisää ","çıkar ":"poista ","2 kat":"×2","Açık":"Päällä","Kapalı":"Pois",
-/* --- historia --- */
-"Hareketler":"Liikkeet","Hareket Ağırlıkları":"Liikkeiden painot","Vücut Ağırlığı":"Kehon paino",
-"Vücut ağırlığı":"Kehon paino","vücut ağırlığı":"kehon paino","Vücut ağırlığın":"Kehon painosi",
-"Bugünkü kilon":"Päivän paino","Kilo":"Paino","Kg":"Kg","Vücut":"Keho","aç":"avaa","gizle":"piilota",
-/* --- kehitys --- */
-"Genel Bakış":"Yleiskatsaus","Egzersizler":"Liikkeet","Performans":"Suorituskyky","Hacim":"Volyymi",
-"Tahmini 1RM":"Arvioitu 1RM","Başarı":"Onnistumis-%","Ort. Artış":"Ka. nousu","Ort. RPE":"Ka. RPE",
-"Başlangıçtan":"Alusta","Mevcut":"Nykyinen","Takıldı":"Jumissa","Dikkat isteyen":"Vaatii huomiota",
-"4 hafta ilerleme":"4 viikon ennuste","Tümü":"Kaikki","3 Ay":"3 kk","6 Ay":"6 kk","1 Yıl":"1 v","4hf":"4 vk",
-"Zamanla her hareketin çalışma ağırlığı":"Jokaisen liikkeen työpaino ajan mittaan",
-"↗ hızlı":"↗ nopea","↗ düzenli":"↗ tasainen","→ yavaşlıyor":"→ hidastuu","◆ dengelendi":"◆ tasaantunut",
-"Hedefi tutturuyorsun ama zorlanman sürekli yüksek. Sistem bu yüzden ağırlığı artırmıyor.":"Osut tavoitteeseen, mutta rasitus pysyy korkeana. Siksi järjestelmä ei lisää painoa.",
-/* --- tyhjät tilat --- */
-"Antrenman kaydettikçe burada özet oluşacak.":"Yhteenveto kertyy tähän, kun kirjaat treenejä.",
-"Antrenman kaydettikçe egzersiz analizleri burada olacak.":"Liikeanalyysit ilmestyvät tähän, kun kirjaat treenejä.",
-"Birkaç antrenman sonra burada analiz görünecek.":"Analyysi ilmestyy tähän muutaman treenin jälkeen.",
-"Hazırlık skorunu düzenli girdikçe burada trend oluşacak.":"Trendi kertyy tähän, kun kirjaat valmiuden säännöllisesti.",
-"Bu aralıkta yeterli veri yok":"Tällä aikavälillä ei ole tarpeeksi tietoa",
-"Grafik için en az 2 kayıt gerekli":"Kuvaaja tarvitsee vähintään 2 merkintää",
-"Grafik için en az 2 kayıtlı antrenman gerekli":"Kuvaaja tarvitsee vähintään 2 kirjattua treeniä",
-"Grafik için en az 2 kilo kaydı gerekli — İlerleme › Vücut'tan ekleyebilirsin":"Kuvaaja tarvitsee vähintään 2 painomerkintää — voit lisätä ne kohdasta Kehitys › Keho",
-/* --- alkuasetukset --- */
-"Başlangıç Ayarları":"Alkuasetukset","Test Setleri":"Testisarjat","Programı Oluştur":"Luo ohjelma",
-"Programı kur":"Määritä ohjelma","Ad":"Nimi","Adın (isteğe bağlı)":"Nimesi (valinnainen)",
-"Her hareket için rahatça kaldırabildiğin bir ağırlık ve tekrar sayısı gir. Uygulama bunlardan başlangıç ağırlıklarını hesaplar.":"Syötä jokaiselle liikkeelle paino, jonka nostat mukavasti, ja toistojen määrä. Sovellus laskee näistä aloituspainot.",
-"Emin değilsen tahmini bir değer gir — program ilk hafta hafif başlar ve kendini hızlıca ayarlar.":"Jos et ole varma, syötä arvio — ohjelma alkaa ensimmäisellä viikolla kevyesti ja säätää itsensä nopeasti.",
-/* --- asetukset --- */
-"Mola zili":"Palautuskello","Veri":"Tiedot","Her Şeyi Sıfırla":"Nollaa kaikki",
-"Verilerimi Dışa Aktar (JSON)":"Vie tietoni (JSON)","Yedekten Geri Yükle (JSON)":"Palauta varmuuskopiosta (JSON)",
-"Yedeği Yapıştırarak Geri Yükle":"Palauta liittämällä varmuuskopio","Yapıştırılanı Yükle":"Lataa liitetty teksti",
-"artış":"nousu","kademe":"porras","Veriler kaydedilemiyor.":"Tietoja ei voi tallentaa.",
-"Yedek dosyasını bir metin düzenleyicide aç, tümünü kopyala ve buraya yapıştır…":"Avaa varmuuskopiotiedosto tekstieditorissa, kopioi kaikki ja liitä se tähän…",
-"Dil":"Kieli",
-/* --- ilmoitukset --- */
-"Antrenmanı iptal et? Girdiğin veriler silinir.":"Perutaanko treeni? Syöttämäsi tiedot poistetaan.",
-"Tüm veriler silinecek. Emin misin?":"Kaikki tiedot poistetaan. Oletko varma?",
-"Son kez soruyorum — bu geri alınamaz. Sil?":"Kysyn viimeisen kerran — tätä ei voi perua. Poistetaanko?",
-"Bu dosya bir antrenman yedeği gibi görünmüyor.":"Tämä tiedosto ei näytä treenien varmuuskopiolta.",
-"Bu metin bir antrenman yedeği gibi görünmüyor.":"Tämä teksti ei näytä treenien varmuuskopiolta.",
-"Bu sayı fazla yüksek görünüyor. En fazla 200 girebilirsin.":"Luku näyttää liian suurelta. Enimmäisarvo on 200.",
-"Önce yedek metnini kutuya yapıştır.":"Liitä ensin varmuuskopion teksti kenttään.",
-"Dosya okunamadı. Geçerli JSON değil.":"Tiedostoa ei voitu lukea. Se ei ole kelvollista JSONia.",
-"Yapıştırdığın metin geçerli JSON değil.":"Liittämäsi teksti ei ole kelvollista JSONia.",
-"Dosya açılamadı: ":"Tiedostoa ei voitu avata: ","Dosya okunurken hata oluştu: ":"Tiedoston lukemisessa tapahtui virhe: ",
-"bilinmeyen":"tuntematon",
-"Veri kaydedilemedi.\n\nTarayıcı bu sayfada depolamaya izin vermiyor. Dosyayı bilgisayardan açtıysan (adres çubuğunda file:// yazıyorsa) bu normaldir — GitHub Pages adresinden aç.":"Tietoja ei voitu tallentaa.\n\nSelain ei salli tallennusta tällä sivulla. Jos avasit tiedoston tietokoneelta (osoiterivillä lukee file://), tämä on normaalia — avaa sovellus GitHub Pages -osoitteesta.",
-"Veriler ekrana yüklendi ama kalıcı olarak kaydedilemedi.\n\nSayfayı yenilersen kaybolur. Uygulamayı GitHub Pages adresinden açıp tekrar dene.":"Tiedot latautuivat näytölle, mutta niitä ei voitu tallentaa pysyvästi.\n\nJos päivität sivun, ne katoavat. Avaa sovellus GitHub Pages -osoitteesta ja yritä uudelleen.",
-/* --- liikkeiden nimet --- */
-"Üst Göğüs Makinesi (Eğik)":"Vinopenkkiprässi (laite)","Triceps Makinesi":"Ojentajalaite",
-"Dumbbell Bench Press (arşiv)":"Dumbbell Bench Press (arkisto)","Leg Raises (arşiv)":"Leg Raises (arkisto)",
-"Plank (arşiv)":"Plank (arkisto)",
-/* --- suoritusvinkit --- */
-"Sırtını ve omuzlarını desteğe yasla":"Pidä selkä ja hartiat tukea vasten",
-"Sırtını desteğe tam yasla":"Paina selkä kokonaan tukea vasten",
-"Sırtını desteğe yasla, kalçan sabit":"Selkä tukea vasten, lantio paikallaan",
-"Sırtını ve omuzlarını mindere tam yapıştır":"Pidä selkä ja hartiat kiinni penkissä",
-"Göğsünü desteğe yasla":"Rintakehä tukea vasten",
-"Göğsünü desteğe yasla, gövde sabit":"Rintakehä tukea vasten, keskivartalo paikallaan",
-"Göğsünü açarak kolları birleştir":"Avaa rintakehää ja tuo kädet yhteen",
-"Göğsünü yukarı aç, hafif geriye yaslan":"Rinta ylös, nojaa hieman taaksepäin",
-"Göğüs yukarıda, bel doğal kavisinde":"Rinta ylhäällä, alaselkä luonnollisessa notkossa",
-"Tutamaklar göğüs hizasında olsun":"Kahvat rinnan korkeudella",
-"Tutamaklar omuz hizasında başlasın":"Aloita kahvat hartioiden korkeudelta",
-"Tutamakları göğüs üst hizasında tut":"Pidä kahvat ylärinnan korkeudella",
-"Dambıllar göğüs hizasında, bilekler düz":"Käsipainot rinnan korkeudella, ranteet suorina",
-"Kontrollü it, üstte kilitleme":"Työnnä hallitusti, älä lukitse yläasennossa",
-"Kontrollü indir, serbest bırakma":"Laske hallitusti, älä päästä irti",
-"Ağırlığı yavaş bırak, düşürme":"Laske paino hitaasti, älä pudota",
-"İnerken 2 saniyede kontrollü bırak":"Laske hallitusti kahden sekunnin ajan",
-"İnerken dirsekler 45 derece açıda":"Kyynärpäät noin 45 asteen kulmassa alas tullessa",
-"İnerken belin kalkıyorsa daha az indir":"Jos alaselkä irtoaa, älä laske niin syvälle",
-"Dirsekler gövdene yakın, sabit":"Kyynärpäät lähellä vartaloa ja paikallaan",
-"Dirsekler gövdene yapışık, sabit kalsın":"Pidä kyynärpäät tiukasti kiinni kyljissä",
-"Dirsekler hafif bükük ve sabit":"Kyynärpäät hieman koukussa ja paikallaan",
-"Dirsekler hafif bükük, omuz hizasına kadar kaldır":"Kyynärpäät hieman koukussa, nosta hartialinjaan",
-"Dirsekler hafif bükük, omuz hizasında aç":"Kyynärpäät hieman koukussa, avaa hartialinjassa",
-"Dirsekleri gövdeye yakın geriye çek":"Vedä kyynärpäät taakse lähellä vartaloa",
-"Dirsekleri tam kilitleme, hafif bükük bırak":"Älä lukitse kyynärpäitä täysin, jätä pieni koukku",
-"Yukarıda dirsekleri tam kilitleme":"Älä lukitse kyynärpäitä yläasennossa",
-"Aşağıda kolları tam uzat":"Ojenna kädet täysin ala-asennossa",
-"Sadece ön kolun hareket etsin":"Vain kyynärvarren tulee liikkua",
-"Bileği bükme, düz tut":"Älä taivuta rannetta, pidä se suorana",
-"Kürek kemiklerini birbirine sık":"Purista lapaluita yhteen",
-"Kürek kemiklerini sık":"Purista lapaluita",
-"Kürekleri sıkarak kolları geriye götür":"Purista lapaluita ja vie kädet taakse",
-"Omuzlarını sıkıştır, göğsü aç":"Vedä hartiat taakse ja avaa rintakehä",
-"Omuzlarını kulağına doğru kaldırma":"Älä nosta hartioita korvia kohti",
-"Kollarınla değil, sırtınla çek":"Vedä selällä, älä käsillä",
-"Kollarınla çekme, karın kaslarını kullan":"Älä vedä käsillä, käytä vatsalihaksia",
-"Barı göğsünün üstüne doğru çek":"Vedä tanko ylärintaa kohti",
-"Gövdeni geriye sallamadan çek":"Vedä heilauttamatta vartaloa taaksepäin",
-"Ayaklar omuz genişliğinde, topuklar basılı":"Jalat hartioiden leveydellä, kantapäät kiinni",
-"Ayaklar platformda omuz genişliğinde":"Jalat hartioiden leveydellä levyllä",
-"Dizler ayak parmaklarıyla aynı yönde":"Polvet samaan suuntaan varpaiden kanssa",
-"Dizleri dışa doğru it":"Työnnä polvia ulospäin",
-"Dizini sertçe kilitleme":"Älä lukitse polvea rajusti",
-"Diz eklemi makinenin dönme noktasıyla aynı hizada":"Polvinivel samaan linjaan laitteen kiertopisteen kanssa",
-"Belini yuvarlamadan in":"Laskeudu pyöristämättä alaselkää",
-"Beli mindere yapışık tut, kalkma":"Pidä alaselkä kiinni tuessa, älä anna sen nousta",
-"Belin yere yapışık, boşluk bırakma":"Alaselkä kiinni lattiassa, ei rakoa",
-"Kalçanı yukarı kaldırma, çökertme":"Älä nosta äläkä pudota lantiota",
-"Topukları geriye çekerken kalçanı sabit tut":"Pidä lantio paikallaan, kun vedät kantapäitä taakse",
-"Bacakları yavaş indir":"Laske jalat hitaasti",
-"Karnını sıkarak gövdeni öne kıvır":"Jännitä vatsa ja rullaa ylävartalo eteen",
-"Karnını ve kalçanı sık, normal nefes al":"Jännitä vatsa ja pakarat, hengitä normaalisti",
-"Nefesini vererek kıvrıl":"Puhalla ulos kun rullaat",
-"Vücudun baştan topuğa düz çizgi":"Suora linja päästä kantapäihin",
-"Ortada bir saniye sık":"Purista sekunnin ajan keskiasennossa",
-"Yukarıda bir saniye bekle, kası sık":"Pidä sekunti yläasennossa ja purista lihasta"
-}
-};
-
-/* Tek metin çevirisi. Türkçe seçiliyken kaynak metin aynen döner. */
-function T(s){
-  if(!s || S.lang === "tr" || !S.lang) return s;
-  const d = TRS[S.lang];
-  return (d && d[s] != null) ? d[s] : s;
-}
-/* Şablonlu metin: T.f("Hedefi tutturdun{0}", rpeTxt) yerine
-   doğrudan parçaları çevirip birleştiriyoruz — bkz. decisionNote. */
-
-/* Ekran çizildikten SONRA çalışan çevirmen. render() metni her seferinde
-   Türkçe üretir, bu geçiş onu hedef dile çevirir. Böylece 250 çağrı
-   yerine tek yer var ve Türkçe seçiliyken maliyet sıfır. */
-const TX_ATTRS = ["placeholder","aria-label","title"];
-function txDom(root){
-  if(!root || S.lang === "tr" || !S.lang) return;
-  const d = TRS[S.lang]; if(!d) return;
-  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-  const hits = [];
-  let n;
-  while((n = w.nextNode())){
-    const raw = n.nodeValue;
-    const t = raw.trim();
-    if(!t || d[t] == null) continue;
-    hits.push([n, raw.replace(t, () => d[t])]);
-  }
-  hits.forEach(([node, val]) => { node.nodeValue = val; });
-  root.querySelectorAll("[placeholder],[aria-label],[title]").forEach(el => {
-    TX_ATTRS.forEach(a => {
-      const v = el.getAttribute(a);
-      if(v && d[v.trim()] != null) el.setAttribute(a, d[v.trim()]);
-    });
-  });
-}
-function txAll(){
-  if(S.lang === "tr" || !S.lang) return;
-  txDom($app); txDom($nav); txDom($rest);
-}
-window.setLang = function(l){
-  if(!LANGS[l]) return;
-  S.lang = l; save();
-  document.documentElement.setAttribute("lang", l);
-  render();
-};
-
 function render(){
   if(!S.setup){ renderSetup(); return; }
   if(view === "session" && live){ renderSession(); }
@@ -1813,7 +1435,6 @@ function render(){
   else { view="home"; renderHome(); }
   renderNav();
   renderRest();
-  txAll();
 }
 window.go = function(v){ view=v; window.scrollTo(0,0); render(); };
 
@@ -1848,7 +1469,7 @@ function renderSetup(){
     <div class="settings-ex">
       <div class="nm">${esc(ex.n)}</div>
       <div class="in">
-        <input type="number" inputmode="decimal" id="tw_${ex.id}" value="${ex.test[0]}" step="0.5">
+        <input type="text" inputmode="decimal" id="tw_${ex.id}" value="${ex.test[0]}" step="0.5">
         <span style="color:var(--muted);font-size:13px;align-self:center">×</span>
         <input type="number" inputmode="numeric" id="tr_${ex.id}" value="${ex.test[1]}" style="width:56px">
       </div>
@@ -1860,7 +1481,7 @@ function renderSetup(){
       <p class="sub">Her hareket için rahatça kaldırabildiğin bir ağırlık ve tekrar sayısı gir. Uygulama bunlardan başlangıç ağırlıklarını hesaplar.</p>
       <div class="card">
         <div class="row"><div class="lbl">Vücut ağırlığın</div>
-          <div><input type="number" inputmode="decimal" id="bw" value="${S.bodyweight}" step="0.1"> <span style="color:var(--muted)">kg</span></div>
+          <div><input type="text" inputmode="decimal" id="bw" value="${S.bodyweight}" step="0.1"> <span style="color:var(--muted)">kg</span></div>
         </div>
         <div class="row"><div class="lbl">Adın (isteğe bağlı)</div>
           <div><input type="text" id="nm" value="${esc(S.name||'')}" placeholder="Mustafa" style="width:140px;text-align:left"></div>
@@ -1874,13 +1495,13 @@ function renderSetup(){
     </div>`;
 }
 window.doSetup = function(){
-  const bw = parseFloat(document.getElementById("bw").value);
+  const bw = pf(document.getElementById("bw").value);
   if(bw > 0) S.bodyweight = bw;
   S.name = document.getElementById("nm").value.trim();
   const tests = {};
   allEx().forEach(ex => {
     if(ex.type === "bw") return;
-    const w = parseFloat(document.getElementById("tw_"+ex.id).value);
+    const w = pf(document.getElementById("tw_"+ex.id).value);
     const r = parseInt(document.getElementById("tr_"+ex.id).value,10);
     tests[ex.id] = [ (w>0?w:ex.test[0]), (r>0?r:ex.test[1]) ];
   });
@@ -1940,12 +1561,12 @@ function renderHome(){
       <div class="qs">
         <div class="k">Antrenman</div>
         <div class="v">${weekSess.length}<small> / ${weekTarget}</small></div>
-        <div class="s">${weekSess.length>=weekTarget?T("tamamlandı"):T("devam")}</div>
+        <div class="s">${weekSess.length>=weekTarget?"tamamlandı":"devam"}</div>
         <div class="viz">${ringSVG(weekSess.length, weekTarget)}</div>
       </div>
       <div class="qs">
         <div class="k">Hacim</div>
-        <div class="v">${(Math.round(weekVol/10)*10).toLocaleString(loc())}<small> kg</small></div>
+        <div class="v">${(Math.round(weekVol/10)*10).toLocaleString("tr-TR")}<small> kg</small></div>
         <div class="s">toplam</div>
         <div class="viz">${volBars}</div>
       </div>
@@ -1967,7 +1588,7 @@ function renderHome(){
         <div class="ago">${daysAgo(last.date)}</div>
       </div>
       <div class="botrow">
-        <div class="m">${F("{v} kg hacim",{v:Math.round(sessionVolume(last)).toLocaleString(loc())})}</div>
+        <div class="m">${Math.round(sessionVolume(last)).toLocaleString("tr-TR")} kg hacim</div>
         ${lastDur?`<div class="t">${lastDur}</div>`:''}
       </div>
     </div>` : ''}
@@ -2098,7 +1719,7 @@ function renderSession(){
       <div class="ex-info">
         <div class="ex-name">${esc(ex.n)}</div>
         <div class="ex-scheme">${ex.scheme}<span class="sep">•</span>RPE ${rpeT ?? '–'}${
-          (()=>{ const t = nextTargetReps(ex); return t ? `<span class="sep">•</span><span style="color:var(--green)">${F("hedef {t} tekrar",{t})}</span>` : ''; })()
+          (()=>{ const t = nextTargetReps(ex); return t ? `<span class="sep">•</span><span style="color:var(--green)">hedef ${t} tekrar</span>` : ''; })()
         }</div>
       </div>
       <div class="ex-side">
@@ -2129,7 +1750,7 @@ function renderSession(){
 }
 
 window.cancelSession = function(){
-  if(confirm(T("Antrenmanı iptal et? Girdiğin veriler silinir."))){
+  if(confirm("Antrenmanı iptal et? Girdiğin veriler silinir.")){
     live=null; save(); stopRest(); view="home"; render();
   }
 };
@@ -2208,7 +1829,7 @@ function renderDetail(){
           if(!t) return '';
           const st = stepOf(ex);
           const top = ex.max != null ? ex.max : t;
-          return `<div class="pill"><span>Hedef</span><span class="hot">${F("{t} tekrar",{t})}</span><span>•</span><span style="color:var(--muted)">${F("{top} olunca +{st} kg",{top,st:fmtKg(st)})}</span></div>`;
+          return `<div class="pill"><span>Hedef</span><span class="hot">${t} tekrar</span><span>•</span><span style="color:var(--muted)">${top} olunca +${fmtKg(st)} kg</span></div>`;
         })()}
       </div>
       <div class="art">${DRAW[ex.id] ? exerciseSVG(ex.id) : iconSVG('dumbbell')}</div>
@@ -2336,7 +1957,7 @@ window.moreReps = function(){
   if(v==null) return;
   const n = parseInt(v,10);
   if(isNaN(n) || n<0) return;
-  if(n>200){ alert(T("Bu sayı fazla yüksek görünüyor. En fazla 200 girebilirsin.")); return; }
+  if(n>200){ alert("Bu sayı fazla yüksek görünüyor. En fazla 200 girebilirsin."); return; }
   enterRep(n);
 };
 window.enterRpe = function(v){
@@ -2427,7 +2048,7 @@ function renderDone(){
       <div class="donestats">
         <div class="donestat"><div class="k">Süre</div><div class="v">${timeStr}</div></div>
         <div class="donestat"><div class="k">Toplam Set</div><div class="v">${d.totalSets}</div></div>
-        <div class="donestat"><div class="k">Toplam Hacim</div><div class="v">${Math.round(d.totalVol).toLocaleString(loc())}<small> kg</small></div></div>
+        <div class="donestat"><div class="k">Toplam Hacim</div><div class="v">${Math.round(d.totalVol).toLocaleString("tr-TR")}<small> kg</small></div></div>
       </div>
     </div>
     ${perfRows ? `<div class="tbl-label">Performans Özeti</div>
@@ -2581,157 +2202,50 @@ function prevEntry(exId, beforeIdx){
 }
 /* O oturumda agirligin neden degistigini/degismedigini aciklar —
    progress() ile ayni kurallari geriye donuk okur, yeni veri saklamaz. */
-/* Karar notu sablonlari. Anahtar = tier. {..} yer tutuculari
-   fill() ile doldurulur. Yeni bir tier eklersen UC dile de satir ekle,
-   yoksa not bos gorunur. */
-const NOTE = {
-tr:{
- rpe:" (Ort. RPE {v})", to:"→ sonraki: {w} kg",
- deload:"Son set hedefi ({target} tekrar) tutmadı, {last} kaldı {to} (%10 azaltıldı)",
- recalibrate:"Hedefin {ratio} katından fazla tekrar çıktın ({last}/{target}) {to} (performansına göre yeniden hesaplandı)",
- bigjump:"Hedefin {ratio} katı tekrar çıktın ({last}/{target}) {to} (çift artış)",
- hold_high_rpe:"Hedefi tutturdun ama zorlanma yüksekti{rpe} {to} (sabit tutuldu)",
- double_low_rpe:"Hedefi rahat tutturdun{rpe} {to} (çift artış)",
- normal:"Hedefi ({target}+ tekrar) tutturdun{rpe} {to}",
- hold_weak_sets:"Son set hedefi tuttu ama ilk setler çok düştü ({weak} — hedef {target}) {to} (bu ağırlık henüz oturmadı, aynı kiloda tekrar dene)",
- coarse_step_up:"Tüm setler {max} tekrarı tuttu{rpe} {to} (bir kademe atlandı, hedef {min} tekrara döner)",
- coarse_hold:"Aralığın tepesindesin ama zorlanma yüksekti{rpe} {to} (kademe atlamak için bir hafta daha)",
- coarse_rep_up:"En zayıf setin {worst}/{max} tekrar{rpe} — makine kademesi {step} kg olduğu için ağırlık değil tekrar artıyor (sonraki hedef {next})",
- coarse_partial:"Setler eksik kaldı {to} (sonraki hedef {next} tekrar)",
- acc_missed:"Bir sette en az {min} tekrar gerekiyordu, en düşük setin {worst} oldu {to} (sabit kaldı, deload yok)",
- acc_hold:"Sınırda tutturdun ama zorlanma yüksekti ({worst}/{min}-{max}{rpe}) {to} (sabit tutuldu)",
- acc_small:"Hedefi tutturdun, aralığın altına yakın kaldın ({worst}/{min}-{max}{rpe}) {to} (küçük artış)",
- acc_normal:"Her sette hedefi tutturdun ({worst}/{min}-{max}{rpe}) {to}",
- acc_big:"Aralığın tepesine yakın ve rahat çıktın ({worst}/{min}-{max}{rpe}) {to} (büyük artış)"
-},
-en:{
- rpe:" (avg RPE {v})", to:"→ next: {w} kg",
- deload:"The last set missed the target ({target} reps), you got {last} {to} (reduced by 10%)",
- recalibrate:"You did more than {ratio}× the target reps ({last}/{target}) {to} (recalculated from your performance)",
- bigjump:"You did {ratio}× the target reps ({last}/{target}) {to} (double increase)",
- hold_high_rpe:"You hit the target but effort was high{rpe} {to} (weight held)",
- double_low_rpe:"You hit the target comfortably{rpe} {to} (double increase)",
- normal:"You hit the target ({target}+ reps){rpe} {to}",
- hold_weak_sets:"The last set hit the target but the earlier sets dropped off ({weak} — target {target}) {to} (this weight hasn't settled yet, repeat it at the same load)",
- coarse_step_up:"Every set reached {max} reps{rpe} {to} (moved up one step, target goes back to {min} reps)",
- coarse_hold:"You're at the top of the range but effort was high{rpe} {to} (one more week before stepping up)",
- coarse_rep_up:"Your weakest set was {worst}/{max} reps{rpe} — the machine steps in {step} kg, so reps go up instead of weight (next target {next})",
- coarse_partial:"The sets fell short {to} (next target {next} reps)",
- acc_missed:"Every set needed at least {min} reps, your lowest was {worst} {to} (held, no deload)",
- acc_hold:"You just made it but effort was high ({worst}/{min}-{max}{rpe}) {to} (weight held)",
- acc_small:"You hit the target but stayed near the bottom of the range ({worst}/{min}-{max}{rpe}) {to} (small increase)",
- acc_normal:"You hit the target in every set ({worst}/{min}-{max}{rpe}) {to}",
- acc_big:"Near the top of the range and comfortable ({worst}/{min}-{max}{rpe}) {to} (large increase)"
-},
-fi:{
- rpe:" (ka. RPE {v})", to:"→ seuraava: {w} kg",
- deload:"Viimeinen sarja jäi tavoitteesta ({target} toistoa), sait {last} {to} (kevennetty 10 %)",
- recalibrate:"Teit yli {ratio}× tavoitetoistot ({last}/{target}) {to} (laskettu uudelleen suorituksesi perusteella)",
- bigjump:"Teit {ratio}× tavoitetoistot ({last}/{target}) {to} (kaksinkertainen nousu)",
- hold_high_rpe:"Osuit tavoitteeseen mutta rasitus oli korkea{rpe} {to} (paino pidetty ennallaan)",
- double_low_rpe:"Osuit tavoitteeseen vaivatta{rpe} {to} (kaksinkertainen nousu)",
- normal:"Osuit tavoitteeseen ({target}+ toistoa){rpe} {to}",
- hold_weak_sets:"Viimeinen sarja osui tavoitteeseen, mutta alkusarjat jäivät selvästi ({weak} — tavoite {target}) {to} (paino ei ole vielä vakiintunut, toista sama paino)",
- coarse_step_up:"Kaikki sarjat ylsivät {max} toistoon{rpe} {to} (noustu yksi porras, tavoite palaa {min} toistoon)",
- coarse_hold:"Olet vaihteluvälin yläpäässä mutta rasitus oli korkea{rpe} {to} (vielä yksi viikko ennen porrasnostoa)",
- coarse_rep_up:"Heikoin sarjasi oli {worst}/{max} toistoa{rpe} — laitteen porras on {step} kg, joten toistot nousevat painon sijaan (seuraava tavoite {next})",
- coarse_partial:"Sarjat jäivät vajaiksi {to} (seuraava tavoite {next} toistoa)",
- acc_missed:"Jokaisessa sarjassa piti olla vähintään {min} toistoa, heikoin oli {worst} {to} (pidetty ennallaan, ei kevennystä)",
- acc_hold:"Ylsit niukasti mutta rasitus oli korkea ({worst}/{min}-{max}{rpe}) {to} (paino pidetty ennallaan)",
- acc_small:"Osuit tavoitteeseen mutta jäit lähelle vaihteluvälin alarajaa ({worst}/{min}-{max}{rpe}) {to} (pieni nousu)",
- acc_normal:"Osuit tavoitteeseen joka sarjassa ({worst}/{min}-{max}{rpe}) {to}",
- acc_big:"Lähellä vaihteluvälin ylärajaa ja vaivatonta ({worst}/{min}-{max}{rpe}) {to} (suuri nousu)"
-}
-};
-
-/* Tarayici alert/confirm kutulari — DOM'da olmadiklari icin cevirmen
-   gecisi bunlara ulasamaz, sablonlari burada duruyor. */
-const MSG = {
- tr:"Yarım kalmış bir {w} antrenmanın var{ago}.\n\nKaldığın yerden devam etmek ister misin?\n\nTamam = devam et\nİptal = bu antrenmanı sil",
- en:"You have an unfinished {w} workout{ago}.\n\nDo you want to carry on where you left off?\n\nOK = continue\nCancel = delete this workout",
- fi:"Sinulla on kesken jäänyt {w}-treeni{ago}.\n\nHaluatko jatkaa siitä mihin jäit?\n\nOK = jatka\nPeruuta = poista tämä treeni"
-};
-const DEL_BW = {
- tr:"{d} · {kg} kg kaydı silinsin mi?",
- en:"Delete the record for {d} · {kg} kg?",
- fi:"Poistetaanko merkintä {d} · {kg} kg?"
-};
-const DONE_MSG = {
- tr:"Geri yükleme tamamlandı. {n} antrenman kaydı yüklendi.",
- en:"Restore complete. {n} workout records loaded.",
- fi:"Palautus valmis. {n} treenimerkintää ladattu."
-};
-const FOUND_MSG = {
- tr:"Yedek bulundu:\n• {n} antrenman kaydı\n• Vücut ağırlığı: {bw} kg\n\nMevcut verinin ÜZERİNE yazılacak. Devam edilsin mi?",
- en:"Backup found:\n• {n} workout records\n• Body weight: {bw} kg\n\nThis will OVERWRITE your current data. Continue?",
- fi:"Varmuuskopio löytyi:\n• {n} treenimerkintää\n• Kehon paino: {bw} kg\n\nTämä KORVAA nykyiset tietosi. Jatketaanko?"
-};
-const fillT = (tpl, o) => String(tpl).replace(/\{(\w+)\}/g, (m,k) => o[k] != null ? o[k] : "");
-
-
-/* Degiskenle karisan kisa metinler. Cevirmen gecisi bunlara ulasamaz
-   (metin dugumu "3 tekrar" gibi degisken iceriyor), o yuzden sablon. */
-const FRAG = {
-en:{
- "{v} kg hacim":"{v} kg volume",
- "hedef {t} tekrar":"target {t} reps",
- "{t} tekrar":"{t} reps",
- "{top} olunca +{st} kg":"at {top} → +{st} kg",
- "dinl. ort. {v}":"rest avg. {v}",
- "· hedef {v}":"· target {v}",
- "Ort. RPE {v}":"Avg. RPE {v}",
- "Ort. {v}":"Avg. {v}",
- "kg · {n} antrenmandır aynı":"kg · same for {n} workouts",
- "{v} kg · {n} antrenmandır aynı":"{v} kg · same for {n} workouts",
- "Her {n} antrenmanda":"Every {n} workouts",
- "Toplam Değişim":"Total change","Toplam Değişim (hacim)":"Total change (volume)",
- "kg·tekrar":"kg·reps","Son {r}":"Last {r}",
- "Kaba kademe · {v} kg · tekrarla ilerler":"Coarse step · {v} kg · progresses by reps",
- "Artış: {v} kg":"Increment: {v} kg"," · kademe {v} kg":" · step {v} kg",
- "Hedef":"Target"
-},
-fi:{
- "{v} kg hacim":"{v} kg volyymiä",
- "hedef {t} tekrar":"tavoite {t} toistoa",
- "{t} tekrar":"{t} toistoa",
- "{top} olunca +{st} kg":"kun {top} → +{st} kg",
- "dinl. ort. {v}":"palautus ka. {v}",
- "· hedef {v}":"· tavoite {v}",
- "Ort. RPE {v}":"Ka. RPE {v}",
- "Ort. {v}":"Ka. {v}",
- "kg · {n} antrenmandır aynı":"kg · sama {n} treenin ajan",
- "{v} kg · {n} antrenmandır aynı":"{v} kg · sama {n} treenin ajan",
- "Her {n} antrenmanda":"Joka {n}. treeni",
- "Toplam Değişim":"Kokonaismuutos","Toplam Değişim (hacim)":"Kokonaismuutos (volyymi)",
- "kg·tekrar":"kg·toisto","Son {r}":"Viim. {r}",
- "Kaba kademe · {v} kg · tekrarla ilerler":"Karkea porras · {v} kg · etenee toistoilla",
- "Artış: {v} kg":"Nousu: {v} kg"," · kademe {v} kg":" · porras {v} kg",
- "Hedef":"Tavoite"
-}
-};
-function F(tpl, o){
-  const d = FRAG[S.lang];
-  return fillT((d && d[tpl] != null) ? d[tpl] : tpl, o || {});
-}
-
 function decisionNote(ex, e){
   if(ex.type === "bw" || e.kg == null) return "";
   const d = progressDecision(ex, e.reps, e.rpe, e.kg);
-  const N = NOTE[S.lang] || NOTE.tr;
-  const tpl = N[d.tier];
-  if(!tpl) return "";
-  const rpeTxt = d.avgRpe != null ? fillT(N.rpe, {v:d.avgRpe}) : "";
-  /* Sonucu acikca yaz: bu performansin ardindan agirlik ne oldu. */
-  const to = d.weight != null ? fillT(N.to, {w:fmtKg(d.weight)}) : "";
-  return fillT(tpl, {
-    rpe: rpeTxt, to: to,
-    target: ex.target, last: d.last,
-    ratio: d.tier === "recalibrate" ? Math.round(d.ratio) : Math.round(d.ratio*10)/10,
-    weak: d.weakReps ? d.weakReps.join(", ") : "",
-    max: d.tier.indexOf("coarse") === 0 ? d.maxReps : d.maxReps,
-    min: d.minReps, worst: d.worst,
-    step: d.step != null ? fmtKg(d.step) : "", next: d.nextTarget
-  });
+  const rpeTxt = d.avgRpe != null ? ` (Ort. RPE ${d.avgRpe})` : "";
+  /* Sonucu acikca yaz: bu performansin ardindan agirlik ne oldu.
+     Boylece notun hangi antrenmana ait oldugu tartismasiz olur. */
+  const to = d.weight != null ? `→ sonraki: ${fmtKg(d.weight)} kg` : "";
+
+  switch(d.tier){
+    case "deload":
+      return `Son set hedefi (${ex.target} tekrar) tutmadı, ${d.last} kaldı ${to} (%10 azaltıldı)`;
+    case "recalibrate":
+      return `Hedefin ${Math.round(d.ratio)} katından fazla tekrar çıktın (${d.last}/${ex.target}) ${to} (performansına göre yeniden hesaplandı)`;
+    case "bigjump":
+      return `Hedefin ${Math.round(d.ratio*10)/10} katı tekrar çıktın (${d.last}/${ex.target}) ${to} (çift artış)`;
+    case "hold_high_rpe":
+      return `Hedefi tutturdun ama zorlanma yüksekti${rpeTxt} ${to} (sabit tutuldu)`;
+    case "double_low_rpe":
+      return `Hedefi rahat tutturdun${rpeTxt} ${to} (çift artış)`;
+    case "normal":
+      return `Hedefi (${ex.target}+ tekrar) tutturdun${rpeTxt} ${to}`;
+    case "hold_weak_sets":
+      return `Son set hedefi tuttu ama ilk setler çok düştü (${d.weakReps.join(", ")} — hedef ${ex.target}) ${to} (bu ağırlık henüz oturmadı, aynı kiloda tekrar dene)`;
+    case "coarse_step_up":
+      return `Tüm setler ${d.maxReps} tekrarı tuttu${rpeTxt} ${to} (bir kademe atlandı, hedef ${d.minReps} tekrara döner)`;
+    case "coarse_hold":
+      return `Aralığın tepesindesin ama zorlanma yüksekti${rpeTxt} ${to} (kademe atlamak için bir hafta daha)`;
+    case "coarse_rep_up":
+      return `En zayıf setin ${d.worst}/${d.maxReps} tekrar${rpeTxt} — makine kademesi ${fmtKg(d.step)} kg olduğu için ağırlık değil tekrar artıyor (sonraki hedef ${d.nextTarget})`;
+    case "coarse_partial":
+      return `Setler eksik kaldı ${to} (sonraki hedef ${d.nextTarget} tekrar)`;
+    case "acc_missed":
+      return `Bir sette en az ${d.minReps} tekrar gerekiyordu, en düşük setin ${d.worst} oldu ${to} (sabit kaldı, deload yok)`;
+    case "acc_hold":
+      return `Sınırda tutturdun ama zorlanma yüksekti (${d.worst}/${d.minReps}-${d.maxReps}${rpeTxt}) ${to} (sabit tutuldu)`;
+    case "acc_small":
+      return `Hedefi tutturdun, aralığın altına yakın kaldın (${d.worst}/${d.minReps}-${d.maxReps}${rpeTxt}) ${to} (küçük artış)`;
+    case "acc_normal":
+      return `Her sette hedefi tutturdun (${d.worst}/${d.minReps}-${d.maxReps}${rpeTxt}) ${to}`;
+    case "acc_big":
+      return `Aralığın tepesine yakın ve rahat çıktın (${d.worst}/${d.minReps}-${d.maxReps}${rpeTxt}) ${to} (büyük artış)`;
+    default:
+      return "";
+  }
 }
 
 /* Iki deger arasindaki yonu ok + renk sinifi olarak verir.
@@ -2780,7 +2294,7 @@ function restLine(ex, e){
   const avg = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
   const hedef = REST[ex.type] || 90;
   const uzun = avg > hedef*1.5;
-  return `<div class="hrest">${F("dinl. ort. {v}",{v:mmss(avg)})}${uzun?` <span style="color:var(--amber)">${F("· hedef {v}",{v:mmss(hedef)})}</span>`:''}</div>`;
+  return `<div class="hrest">dinl. ort. ${mmss(avg)}${uzun?` <span style="color:var(--amber)">· hedef ${mmss(hedef)}</span>`:''}</div>`;
 }
 
 function changeLine(ex, s, idx){
@@ -2800,7 +2314,7 @@ function changeLine(ex, s, idx){
   const past = p && p.kg != null ? p.kg : null;
   const note = decisionNote(ex, e);
   /* Not artik "sonraki: X kg" tekrar etmiyor — zincir zaten soyluyor. */
-  const noteClean = note ? note.replace(/\s*→[^(]*/, " ").replace(/\s{2,}/g," ").trim() : "";
+  const noteClean = note ? note.replace(/\s*→ sonraki: [^(]*/, " ").replace(/\s{2,}/g," ").trim() : "";
   const noteHtml = noteClean ? `<div class="hnote">${noteClean}</div>` : "";
   return chainHtml(past, e.kg, next, "kg", fmtKg) + restLine(ex, e) + noteHtml;
 }
@@ -2848,8 +2362,8 @@ function renderHistoryScreen(){
         <div style="flex:1"><div class="n">${esc(wo.name)}</div>
           <div class="d">${trDateLong(s.date)}</div></div>
         <div style="text-align:right">
-          <div class="v">${Math.round(vol).toLocaleString(loc())} kg</div>
-          ${avgRpe!=null?`<div class="hrpe">${F("Ort. RPE {v}",{v:avgRpe})}</div>`:''}
+          <div class="v">${Math.round(vol).toLocaleString("tr-TR")} kg</div>
+          ${avgRpe!=null?`<div class="hrpe">Ort. RPE ${avgRpe}</div>`:''}
         </div>
       </div>
       ${expanded ? detailRows : ''}
@@ -3031,7 +2545,7 @@ function progressGenel(){
             ${chevIcon()}
           </div>
         </div>
-        <div class="pbig">${fmtKg(p.current)}<span class="punit">${F("kg · {n} antrenmandır aynı",{n:p.flatCount})}</span></div>
+        <div class="pbig">${fmtKg(p.current)}<span class="punit">kg · ${p.flatCount} antrenmandır aynı</span></div>
         <div class="rpebars">${bars}</div>
         <div class="pnote">${p.note || 'Hedefi tutturuyorsun ama zorlanman sürekli yüksek. Sistem bu yüzden ağırlığı artırmıyor.'}</div>
       </div>`;
@@ -3044,7 +2558,7 @@ function progressGenel(){
           ${chevIcon()}
         </div>
       </div>
-      <div class="pmuted">${F("{v} kg · {n} antrenmandır aynı",{v:fmtKg(p.current),n:p.flatCount})}</div>
+      <div class="pmuted">${fmtKg(p.current)} kg · ${p.flatCount} antrenmandır aynı</div>
     </div>`;
   }).join("");
 
@@ -3242,7 +2756,7 @@ function volumeChartCard(){
     return `<text x="${x.toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="9" fill="var(--muted)" font-weight="600">${labels[i]}</text>`;
   }).join("");
   return `<div class="chartbox">
-    <div class="hd"><div class="l">Antrenman Hacmi</div><div class="r">${Math.round(vals[vals.length-1]).toLocaleString(loc())}<small>kg</small></div></div>
+    <div class="hd"><div class="l">Antrenman Hacmi</div><div class="r">${Math.round(vals[vals.length-1]).toLocaleString("tr-TR")}<small>kg</small></div></div>
     <svg class="chartsvg" viewBox="0 0 ${W} ${H}">${bars}${xl}</svg>
   </div>`;
 }
@@ -3329,11 +2843,11 @@ function progressEgzersizler(){
       <div><div class="k">Ort. RPE</div><div class="v">${avgRpe}</div></div>
     </div>
     <div class="factrow">
-      <div><div class="k">Ort. Artış</div><div class="v">${incRate ? F("Her {n} antrenmanda",{n:incRate}) : "—"}</div></div>
+      <div><div class="k">Ort. Artış</div><div class="v">${incRate ? 'Her '+incRate+' antrenmanda' : '—'}</div></div>
       <div class="icon">↗</div>
     </div>
     <div class="factrow">
-      <div><div class="k">${F(coarseEx?"Toplam Değişim (hacim)":"Toplam Değişim")}</div><div class="v" style="color:${dChange>=0?'var(--green)':'var(--red)'}">${dChange>=0?'+':''}${coarseEx?Math.round(dChange).toLocaleString('tr-TR'):fmtKg(dChange)} ${coarseEx?F("kg·tekrar"):"kg"}</div></div>
+      <div><div class="k">Toplam Değişim${coarseEx?' (hacim)':''}</div><div class="v" style="color:${dChange>=0?'var(--green)':'var(--red)'}">${dChange>=0?'+':''}${coarseEx?Math.round(dChange).toLocaleString('tr-TR'):fmtKg(dChange)} ${coarseEx?'kg·tekrar':'kg'}</div></div>
       <div class="icon">${dChange>=0?'↗':'↘'}</div>
     </div>
   `;
@@ -3373,7 +2887,7 @@ function bigLineChart(series, rangeLbl){
   return `<div class="chartbox">
     <div class="hd">
       <div><div class="l">Çalışma Ağırlığı</div><div class="big">${fmtKg(now)}<small>kg</small></div><div class="tag">Mevcut</div></div>
-      <div class="right"><div class="chg ${delta>=0?'up':'dn'}">${delta>=0?'+':''}${fmtKg(delta)} kg</div><div class="sub2">${F("Son {r}",{r:rangeLbl||""})}</div></div>
+      <div class="right"><div class="chg ${delta>=0?'up':'dn'}">${delta>=0?'+':''}${fmtKg(delta)} kg</div><div class="sub2">Son ${rangeLbl||''}</div></div>
     </div>
     <svg class="chartsvg" viewBox="0 0 ${W} ${H}">
       ${grid}
@@ -3390,37 +2904,20 @@ function progressVucut(){
   const last = log[log.length-1];
   const diff = (first && last) ? last.kg - first.kg : 0;
   const chart = log.length >= 2 ? bwChart(log) : `<div class="chartbox"><div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Grafik için en az 2 kayıt gerekli</div></div>`;
-  const rows = log.slice().reverse().slice(0,30).map(b=>`<div class="hrow" style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);font-size:14px">
+  const rows = log.slice().reverse().slice(0,10).map(b=>`<div class="hrow" style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);font-size:14px">
     <div style="color:var(--muted)">${trDateLong(b.date)}</div>
-    <div style="display:flex;align-items:center;gap:14px">
-      <span style="font-family:var(--f-num);font-weight:700">${fmtKg(b.kg)} kg</span>
-      <button onclick="delBw('${b.date}')" aria-label="Sil"
-        style="background:none;border:0;color:var(--faint);font-size:17px;line-height:1;padding:2px 4px;cursor:pointer">×</button>
-    </div>
+    <div style="font-family:var(--f-num);font-weight:700">${fmtKg(b.kg)} kg</div>
   </div>`).join("");
   return `
     <div class="card">
-      <div class="row"><div class="lbl">Kilo</div>
-        <div><input type="number" inputmode="decimal" id="newbw" step="0.1" placeholder="${fmtKg(S.bodyweight)}" style="width:110px"> <span style="color:var(--muted)">kg</span></div>
+      <div class="row"><div class="lbl">Bugünkü kilon</div>
+        <div><input type="text" inputmode="decimal" id="newbw" step="0.1" placeholder="${fmtKg(S.bodyweight)}" style="width:110px"> <span style="color:var(--muted)">kg</span></div>
       </div>
-      <div class="row"><div class="lbl">Tarih</div>
-        <div><input type="date" id="newbwdate" value="${todayISO()}" max="${todayISO()}" onchange="render()" style="width:150px"></div>
-      </div>
-      ${bwDateHint()}
       <button class="btn sm" style="margin-top:12px" onclick="logBw()">Kaydet</button>
     </div>
     ${chart}
     ${rows ? `<div class="card"><div class="settbl-title" style="padding:0 0 6px">Geçmiş</div>${rows}</div>` : ''}
   `;
-}
-/* Gecmis bir tarih secildiyse guncel kilonun degismeyecegini soyle.
-   Bu ayrim onemli: S.bodyweight "su anki kilon", 6 ay oncesi onu bozmamali. */
-function bwDateHint(){
-  const el = document.getElementById("newbwdate");
-  const v = el ? el.value : todayISO();
-  if(!v || v === todayISO()) return "";
-  return `<div style="background:var(--cell);border-radius:9px;padding:8px 10px;margin-top:10px;
-    color:var(--faint);font-size:11px;line-height:1.5">Geçmiş bir tarih seçtin — bu kayıt grafiğe eklenir, güncel kilon değişmez.</div>`;
 }
 function bwChart(log){
   const W=320,H=170,PL=32,PR=10,PT=14,PB=26;
@@ -3429,12 +2926,7 @@ function bwChart(log){
   let mn=Math.min(...vals), mx=Math.max(...vals);
   if(mn===mx){mn-=2;mx+=2;}
   const pad=(mx-mn)*0.15; mn-=pad; mx+=pad;
-  /* X ekseni tarihe orantili. Sira bazli olsaydi 1 ay ile 3 gunluk
-     bosluk ayni genislikte cizilir, dususun hizi yanlis gorunurdu. */
-  const tms = log.map(b=>new Date(b.date).getTime());
-  const t0 = tms[0], t1 = tms[tms.length-1];
-  const span = t1 - t0;
-  const xOf=i=>PL+(log.length<=1||span<=0?iw/2:((tms[i]-t0)/span)*iw);
+  const xOf=i=>PL+(log.length<=1?iw/2:(i/(log.length-1))*iw);
   const yOf=v=>PT+ih-((v-mn)/(mx-mn))*ih;
   let grid="";
   for(let i=0;i<=3;i++){
@@ -3447,18 +2939,8 @@ function bwChart(log){
     log.map((b,i)=>`L${xOf(i).toFixed(1)} ${yOf(b.kg).toFixed(1)}`).join(" ") +
     ` L${xOf(log.length-1).toFixed(1)} ${(PT+ih).toFixed(1)} Z`;
   const dots = log.map((b,i)=>`<circle cx="${xOf(i).toFixed(1)}" cy="${yOf(b.kg).toFixed(1)}" r="3.2" fill="var(--bg)" stroke="var(--amber)" stroke-width="2"/>`).join("");
-  /* Etiketleri indekse gore degil, X mesafesine gore seyrelt — noktalar
-     artik esit araliklarla durmuyor, yoksa ust uste binerler. */
-  let lastX = -999;
-  const keep = log.map((b,i)=>{
-    if(i===log.length-1) return true;
-    if(xOf(i)-lastX < 52) return false;
-    lastX = xOf(i); return true;
-  });
-  if(log.length>1 && xOf(log.length-1)-lastX < 52){
-    for(let i=log.length-2;i>=0;i--){ if(keep[i]){ keep[i]=false; break; } }
-  }
-  const xl = log.map((b,i)=>keep[i]?
+  const step = Math.max(1, Math.ceil(log.length/5));
+  const xl = log.map((b,i)=>(i%step===0||i===log.length-1)?
     `<text x="${xOf(i).toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="9" fill="var(--muted)" font-weight="600">${trDate(b.date)}</text>`:'').join("");
   const diff = log[log.length-1].kg - log[0].kg;
   return `<div class="chartbox">
@@ -3475,22 +2957,12 @@ function bwChart(log){
   </div>`;
 }
 window.logBw = function(){
-  const v = parseFloat(document.getElementById("newbw").value);
+  const v = pf(document.getElementById("newbw").value);
   if(!(v>0)) return;
-  const el = document.getElementById("newbwdate");
-  const t = (el && el.value) ? el.value : todayISO();
-  if(t > todayISO()) return;              // ileri tarih yok
-  if(t === todayISO()) S.bodyweight = v;  // guncel kilo sadece bugunku olcumle degisir
+  S.bodyweight = v;
+  const t = todayISO();
   const ex = S.bwLog.find(b=>b.date===t);
   if(ex) ex.kg = v; else S.bwLog.push({date:t, kg:v});
-  S.bwLog.sort((a,b)=> a.date<b.date?-1:1);
-  save(); render();
-};
-window.delBw = function(date){
-  const i = S.bwLog.findIndex(b=>b.date===date);
-  if(i<0) return;
-  if(!confirm(fillT(DEL_BW[S.lang] || DEL_BW.tr, {d:trDateLong(date), kg:fmtKg(S.bwLog[i].kg)}))) return;
-  S.bwLog.splice(i,1);
   save(); render();
 };
 
@@ -3517,7 +2989,7 @@ function progressPerformans(){
   return `<div class="chartbox">
     <div class="hd">
       <div><div class="l">Hazırlık Skoru</div><div class="r">${scores[scores.length-1]}</div></div>
-      <div style="font-size:11px;color:var(--muted);font-weight:600">${F("Ort. {v}",{v:avg})}</div>
+      <div style="font-size:11px;color:var(--muted);font-weight:600">Ort. ${avg}</div>
     </div>
     <svg class="chartsvg" viewBox="0 0 ${W} ${H}">
       ${grid}
@@ -3544,14 +3016,14 @@ function renderSettings(){
       const coarse = isCoarse(ex);
       const pinned = hasStep(ex);
       const sub = coarse
-        ? `<small style="color:var(--amber)">${F("Kaba kademe · {v} kg · tekrarla ilerler",{v:fmtKg(stepOf(ex))})}</small>`
-        : `<small>${F("Artış: {v} kg",{v:fmtKg(incOf(ex))})}${pinned?F(" · kademe {v} kg",{v:fmtKg(stepOf(ex))}):''}</small>`;
+        ? `<small style="color:var(--amber)">Kaba kademe · ${fmtKg(stepOf(ex))} kg · tekrarla ilerler</small>`
+        : `<small>Artış: ${fmtKg(incOf(ex))} kg${pinned?` · kademe ${fmtKg(stepOf(ex))} kg`:''}</small>`;
       return `<div class="settings-ex">
         <div class="nm">${esc(ex.n)}${sub}</div>
         <div class="in">
-          <input type="number" inputmode="decimal" step="0.5" value="${S.weights[ex.id]??''}" onchange="setW('${ex.id}',this.value)" placeholder="kg">
-          <input type="number" inputmode="decimal" step="0.5" value="${incOf(ex)}" onchange="setInc('${ex.id}',this.value)" placeholder="artış">
-          ${pinned?`<input type="number" inputmode="decimal" step="0.5" value="${stepOf(ex)}" onchange="setStep('${ex.id}',this.value)" placeholder="kademe">`:''}
+          <input type="text" inputmode="decimal" step="0.5" value="${S.weights[ex.id]??''}" onchange="setW('${ex.id}',this.value)" placeholder="kg">
+          <input type="text" inputmode="decimal" step="0.5" value="${incOf(ex)}" onchange="setInc('${ex.id}',this.value)" placeholder="artış">
+          ${pinned?`<input type="text" inputmode="decimal" step="0.5" value="${stepOf(ex)}" onchange="setStep('${ex.id}',this.value)" placeholder="kademe">`:''}
         </div></div>`;
     }).join("");
     return `<h2>${PROGRAM[k].name}</h2><div class="card" style="padding:4px 16px">${rows}</div>`;
@@ -3567,22 +3039,15 @@ function renderSettings(){
     <div class="hero"><div class="name">Ayarlar</div></div>
     ${warn}
     <div class="card">
-      <div class="row" style="align-items:flex-start">
-        <div class="lbl">Dil / Language / Kieli</div></div>
-      <div class="langseg">
-        ${Object.keys(LANGS).map(l=>`<button class="${S.lang===l?'on':''}" onclick="setLang('${l}')">${LANGS[l]}</button>`).join("")}
-      </div>
-    </div>
-    <div class="card">
       <div class="row"><div class="lbl">Ad</div>
         <div><input type="text" value="${esc(S.name||'')}" onchange="S.name=this.value; save()" placeholder="—" style="width:140px;text-align:left"></div></div>
       <div class="row"><div class="lbl">Vücut ağırlığı</div>
-        <div><input type="number" inputmode="decimal" step="0.1" value="${S.bodyweight}" onchange="setBw(this.value)"> <span style="color:var(--muted)">kg</span></div></div>
+        <div><input type="text" inputmode="decimal" step="0.1" value="${S.bodyweight}" onchange="setBw(this.value)"> <span style="color:var(--muted)">kg</span></div></div>
       <div class="row"><div class="lbl">Sıradaki antrenman</div>
-        <div><button class="btn sm ghost" style="width:auto;padding:9px 14px" onclick="cycleNext()">${T(nextName)} ⟳</button></div></div>
+        <div><button class="btn sm ghost" style="width:auto;padding:9px 14px" onclick="cycleNext()">${nextName} ⟳</button></div></div>
       <div class="row"><div class="lbl">Mola zili</div>
         <div><button class="btn sm ghost" style="width:auto;padding:9px 14px;${S.restBell?'color:var(--amber);border-color:var(--amber)':''}"
-          onclick="toggleBell()">${S.restBell?T("Açık"):T("Kapalı")}</button></div></div>
+          onclick="toggleBell()">${S.restBell?'Açık':'Kapalı'}</button></div></div>
     </div>
     <p class="note">Mola zili: süre bitince ses çalar. Açıkken mola boyunca çok kısık bir ses çalar — bu olmadan iPhone sayfayı dondurur ve zil hiç çalmaz. Podcast veya müziğini duraklatabilir, telefon sessiz moddayken de duyulmaz. Sayaç, zil kapalıyken de doğru çalışır.</p>
     <p class="note">Ağırlık: bir sonraki antrenmanda kullanacağın kilo. Artış: hedefi tutturduğunda eklenecek kilo. Kademe alanı sadece pinli makinelerde (Biceps, Triceps) görünür — o makinede gerçekten seçilebilen en küçük adım. Kademe, ağırlığın %10'undan büyükse hareket kaba kademe moduna geçer: ağırlık her antrenman artmaz, önce tekrarlar tavana çıkar, sonra tek seferde bir kademe atlanır. Plakalı makineler bu moda hiç girmez.</p>
@@ -3620,10 +3085,10 @@ window.toggleBell = function(){
   else keepAliveOff();
   render();
 };
-window.setW = function(id,v){ const n=parseFloat(v); if(n>0){S.weights[id]=n; save();} };
-window.setInc = function(id,v){ const n=parseFloat(v); if(n>0){S.incs[id]=n; save(); render();} };
-window.setStep = function(id,v){ const n=parseFloat(v); if(n>0){ if(!S.steps) S.steps={}; S.steps[id]=n; save(); render();} };
-window.setBw = function(v){ const n=parseFloat(v); if(n>0){S.bodyweight=n; save();} };
+window.setW = function(id,v){ const n=pf(v); if(n>0){S.weights[id]=n; save();} };
+window.setInc = function(id,v){ const n=pf(v); if(n>0){S.incs[id]=n; save(); render();} };
+window.setStep = function(id,v){ const n=pf(v); if(n>0){ if(!S.steps) S.steps={}; S.steps[id]=n; save(); render();} };
+window.setBw = function(v){ const n=pf(v); if(n>0){S.bodyweight=n; save();} };
 window.cycleNext = function(){ S.nextIdx=(S.nextIdx+1)%3; save(); render(); };
 window.exportData = function(){
   const txt = JSON.stringify(S,null,2);
@@ -3643,14 +3108,14 @@ window.importData = function(ev){
     clear();
     let data;
     try { data = JSON.parse(reader.result); }
-    catch(e){ alert(T("Dosya okunamadı. Geçerli JSON değil.")+"\n\n"+(e && e.message ? e.message : "")); return; }
+    catch(e){ alert("Dosya okunamadı. Geçerli JSON değil.\n\n"+(e && e.message ? e.message : "")); return; }
     if(typeof data !== "object" || data === null ||
        !("weights" in data) || !("sessions" in data) || !Array.isArray(data.sessions)){
-      alert(T("Bu dosya bir antrenman yedeği gibi görünmüyor."));
+      alert("Bu dosya bir antrenman yedeği gibi görünmüyor.");
       return;
     }
     const nSess = data.sessions.length;
-    if(!confirm(fillT(FOUND_MSG[S.lang] || FOUND_MSG.tr, {n:nSess, bw:(data.bodyweight ?? '—')}))) return;
+    if(!confirm(`Yedek bulundu:\n• ${nSess} antrenman kaydı\n• Vücut ağırlığı: ${data.bodyweight ?? '—'} kg\n\nMevcut verinin ÜZERİNE yazılacak. Devam edilsin mi?`)) return;
     S = Object.assign(blank(), data);
     if(typeof S.nextIdx !== "number" || S.nextIdx<0) S.nextIdx = 0;
     S.nextIdx = S.nextIdx % 3;
@@ -3660,9 +3125,9 @@ window.importData = function(ev){
     S.setup = true;
     applyImported(nSess);
   };
-  reader.onerror = () => { clear(); alert(T("Dosya okunurken hata oluştu: ") + (reader.error && reader.error.name ? reader.error.name : T("bilinmeyen"))); };
+  reader.onerror = () => { clear(); alert("Dosya okunurken hata oluştu: " + (reader.error && reader.error.name ? reader.error.name : "bilinmeyen")); };
   try{ reader.readAsText(file); }
-  catch(e){ clear(); alert(T("Dosya açılamadı: ") + (e && e.message ? e.message : "")); }
+  catch(e){ clear(); alert("Dosya açılamadı: " + (e && e.message ? e.message : "")); }
 };
 
 /* shared tail for both file- and paste-based import */
@@ -3679,9 +3144,9 @@ function applyImported(nSess){
     verified = Array.isArray(back.sessions) ? back.sessions.length : 0;
   }catch(e){}
   if(verified === nSess){
-    alert(fillT(DONE_MSG[S.lang] || DONE_MSG.tr, {n:nSess}));
+    alert(`Geri yükleme tamamlandı. ${nSess} antrenman kaydı yüklendi.`);
   } else {
-    alert(T("Veriler ekrana yüklendi ama kalıcı olarak kaydedilemedi.\n\nSayfayı yenilersen kaybolur. Uygulamayı GitHub Pages adresinden açıp tekrar dene."));
+    alert("Veriler ekrana yüklendi ama kalıcı olarak kaydedilemedi.\n\nSayfayı yenilersen kaybolur. Uygulamayı GitHub Pages adresinden açıp tekrar dene.");
   }
 }
 
@@ -3693,17 +3158,17 @@ window.pasteImport = function(){
 window.doPasteImport = function(){
   const ta = document.getElementById("pasteArea");
   const txt = (ta && ta.value || "").trim();
-  if(!txt){ alert(T("Önce yedek metnini kutuya yapıştır.")); return; }
+  if(!txt){ alert("Önce yedek metnini kutuya yapıştır."); return; }
   let data;
   try{ data = JSON.parse(txt); }
-  catch(e){ alert(T("Yapıştırdığın metin geçerli JSON değil.")+"\n\n"+(e && e.message ? e.message : "")); return; }
+  catch(e){ alert("Yapıştırdığın metin geçerli JSON değil.\n\n"+(e && e.message ? e.message : "")); return; }
   if(typeof data !== "object" || data === null ||
      !("weights" in data) || !("sessions" in data) || !Array.isArray(data.sessions)){
-    alert(T("Bu metin bir antrenman yedeği gibi görünmüyor."));
+    alert("Bu metin bir antrenman yedeği gibi görünmüyor.");
     return;
   }
   const nSess = data.sessions.length;
-  if(!confirm(fillT(FOUND_MSG[S.lang] || FOUND_MSG.tr, {n:nSess, bw:(data.bodyweight ?? '—')}))) return;
+  if(!confirm(`Yedek bulundu:\n• ${nSess} antrenman kaydı\n• Vücut ağırlığı: ${data.bodyweight ?? '—'} kg\n\nMevcut verinin ÜZERİNE yazılacak. Devam edilsin mi?`)) return;
   S = Object.assign(blank(), data);
   if(typeof S.nextIdx !== "number" || S.nextIdx<0) S.nextIdx = 0;
   S.nextIdx = S.nextIdx % 3;
@@ -3714,8 +3179,8 @@ window.doPasteImport = function(){
   applyImported(nSess);
 };
 window.resetAll = function(){
-  if(!confirm(T("Tüm veriler silinecek. Emin misin?"))) return;
-  if(!confirm(T("Son kez soruyorum — bu geri alınamaz. Sil?"))) return;
+  if(!confirm("Tüm veriler silinecek. Emin misin?")) return;
+  if(!confirm("Son kez soruyorum — bu geri alınamaz. Sil?")) return;
   localStorage.removeItem(KEY); S = blank(); view="home"; render();
 };
 
@@ -3755,7 +3220,6 @@ function renderRest(){
     <button onclick="addRest(30)">+30sn</button>
     <button onclick="stopRest()">×</button>
   </div>`;
-  txDom($rest);
 }
 /* Uygulamaya geri donuldugu an dogru rakami goster (250ms bekleme). */
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) renderRest(); });
@@ -3957,7 +3421,7 @@ function restoreLiveSession(){
   const agoTxt = ago == null ? "" : ago < 60 ? ` (${ago} dk önce başladı)` :
                  ` (${Math.round(ago/60)} saat önce başladı)`;
   setTimeout(()=>{
-    const cont = confirm(fillT(MSG[S.lang] || MSG.tr, {w:PROGRAM[live.w].name, ago:agoTxt}));
+    const cont = confirm(`Yarım kalmış bir ${PROGRAM[live.w].name} antrenmanın var${agoTxt}.\n\nKaldığın yerden devam etmek ister misin?\n\nTamam = devam et\nİptal = bu antrenmanı sil`);
     if(!cont){ live = null; view = "home"; save(); }
     render();
   }, 100);
@@ -3983,7 +3447,6 @@ function seedMissingWeights(){
 }
 
 function runMigrations(){
-  if(!S.lang || !LANGS[S.lang]) S.lang = "tr";
   migrateSideToTotal();   // once birim duzeltmesi, sonra digerleri
   migrateB2u();
   migrateTieredRecalibration();
@@ -3999,7 +3462,6 @@ checkStorage();
 load();
 restoreLiveSession();     // migration'lardan ONCE — onlar save() cagiriyor ve
 runMigrations();          // o anda bellekteki live henuz null oldugu icin
-if(S.lang && LANGS[S.lang]) document.documentElement.setAttribute("lang", S.lang);
 render();                 // diskteki kaydi silerlerdi
 window.addEventListener("beforeunload", e => { if(live){ e.preventDefault(); e.returnValue=""; } });
 </script>
