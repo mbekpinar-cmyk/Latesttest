@@ -535,6 +535,7 @@ const CUES = {
   b6:["Belin yere yapışık, boşluk bırakma","Bacakları yavaş indir","İnerken belin kalkıyorsa daha az indir"],
   c1:["Sırtını desteğe tam yasla","Tutamaklar omuz hizasında başlasın","Yukarıda dirsekleri tam kilitleme"],
   c2:["Ayaklar omuz genişliğinde, topuklar basılı","Dizleri dışa doğru it","Belini yuvarlamadan in"],
+  c2u:["Sırtının üst kısmını desteğe yasla, çene hafif içeride","Ayaklar dizin altında, topuklardan it","Üstte kalçanı sık, belini aşırı kavisleme"],
   c3:["Göğsünü desteğe yasla, gövde sabit","Dirsekleri gövdeye yakın geriye çek","Kürek kemiklerini sık"],
   c4:["Dirsekler hafif bükük ve sabit","Göğsünü açarak kolları birleştir","Ortada bir saniye sık"],
   c5:["Dirsekler gövdene yapışık, sabit kalsın","Sadece ön kolun hareket etsin","Aşağıda kolları tam uzat"],
@@ -745,6 +746,28 @@ const DRAW = {
       + C(kn[0],kn[1],3.5,MACH);
   },
 
+  /* Hip Thrust (Bootybuilder) — sırt desteğe dayalı, kalça yukarı itiş */
+  c2u(t){
+    // t=0 kalça aşağıda, t=1 kalça yukarıda (gövde-uyluk hizalı)
+    const K=[132,82], F=[132,114], S=[52,86];                 // diz, ayak, omuz (sabit)
+    const a=lerp(148,184,t)*Math.PI/180;
+    const hip=[K[0]+40*Math.cos(a), K[1]+40*Math.sin(a)];    // uyluk uzunluğu sabit
+    const lo=[K[0]+40*Math.cos(148*Math.PI/180), K[1]+40*Math.sin(148*Math.PI/180)];
+    const hi=[K[0]+40*Math.cos(184*Math.PI/180), K[1]+40*Math.sin(184*Math.PI/180)];
+    return R(24,116,160,5,MACH,2)                              // zemin
+      + R(28,88,30,28,MACH,3)                                  // sırt desteği (bank)
+      + R(164,50,8,66,MACH,3)                                  // makine direği
+      + L(hip[0]+8,hip[1]-9,168,56,3,MACH)                     // kalça kolu
+      + P(`M${lo[0].toFixed(1)} ${(lo[1]-9).toFixed(1)} L${hi[0].toFixed(1)} ${(hi[1]-9).toFixed(1)}`,2,ACC,"4 4")
+      + C(41,79,9)                                             // baş
+      + L(S[0],S[1],hip[0],hip[1],6)                           // gövde
+      + L(hip[0],hip[1],K[0],K[1],6)                           // uyluk
+      + L(K[0],K[1],F[0],F[1],5)                               // baldır
+      + L(F[0],F[1],F[0]+10,F[1],5)                            // ayak
+      + C(K[0],K[1],3.5,MACH)
+      + R(hip[0]-11,hip[1]-10,22,7,ACC,3);                     // kalça pedi
+  },
+
   /* Machine Row — makinede çekiş */
   c3(t){
     const hx=lerp(140,108,t);
@@ -849,8 +872,8 @@ const PROGRAM = {
   ]},
   C: { name:"Antrenman C", ex:[
     {id:"c1", n:"Shoulder Press Machine",type:"main", sets:4, scheme:"4x5+",    target:5,  inc:2.5, pct:0.70, test:[40,8]},
-    {id:"c2", n:"Hack Squat / Leg Press",type:"sec",  sets:3, scheme:"3x10",    target:10, inc:5,   pct:0.60, test:[70,10]},
-    {id:"c3", n:"Machine Row",           type:"sec4", sets:4, scheme:"4x10",    target:10, inc:2.5, pct:0.60, test:[40,8]},
+    {id:"c2u", n:"Hip Thrust (Bootybuilder)", type:"sec", sets:3, scheme:"3x10",  target:10, inc:5,   pct:0.60, test:[70,10]},
+    {id:"c3", n:"Machine Row",          type:"sec4", sets:4, scheme:"4x10",    target:10, inc:2.5, pct:0.60, test:[40,8]},
     {id:"c4", n:"Pec Deck (Chest Fly)",  type:"acc",  sets:3, scheme:"3x10-14", total:42, min:10, max:14,  inc:2.5, pct:0.55, test:[25,10]},
     {id:"c5", n:"Triceps Makinesi",      type:"acc",  sets:3, scheme:"3x8-15",  total:45, min:8, max:15,  inc:2.5, step:5, pct:0.55, test:[20,8]},
     AB_CRUNCH,
@@ -869,13 +892,14 @@ const ARCHIVED_EX = [
   {id:"b2", n:"Dumbbell Bench Press (arşiv)", type:"sec", sets:3, scheme:"3x10", target:10, inc:2, pct:0.60, test:[16,10]},
   {id:"b6", n:"Leg Raises (arşiv)", type:"bw", sets:3, scheme:"3xmax"},
   {id:"c6", n:"Plank (arşiv)", type:"bw", sets:3, scheme:"3xmax"},
+  {id:"c2", n:"Hack Squat (arşiv)", type:"sec", sets:3, scheme:"3x10", target:10, inc:5, pct:0.60, test:[70,10]},
 ];
 function findExAny(id){ return findEx(id) || ARCHIVED_EX.find(e => e.id === id); }
 const REST = { main:180, sec:120, sec4:120, acc:90, bw:60 };
 const TARGET_RPE = {
   a1:null, a2:8, a3:8, a4:9, a5:9, a6:9,
   b1:null, b2:8, b2u:8, b3:8, b4:9, b5:8, b6:9,
-  c1:null, c2:8, c3:8, c4:8, c5:8, c6:9,
+  c1:null, c2:8, c2u:8, c3:8, c4:8, c5:8, c6:9,
 };
 const RPE_LABELS = {
   6:"Kolay — 4+ tekrar kaldı",
@@ -3408,10 +3432,14 @@ function restoreLiveSession(){
   if(!S.live || !S.live.w || !PROGRAM[S.live.w]) { S.live = null; liveRestored = true; return; }
   live = S.live;
   liveRestored = true;
-  /* Program degismisse (yeni hareket eklendi vb.) eksik girisleri tamamla */
+  /* Program degismisse (yeni hareket eklendi vb.) eksik girisleri tamamla.
+     Bu noktada seedMissingWeights() henuz calismadi (migration'lardan once
+     geliyoruz) — yeni hareketin agirligi bos kalmasin diye ayni formulle
+     varsayilani burada hesapla. */
   PROGRAM[live.w].ex.forEach(ex => {
     if(!live.entries[ex.id]){
-      live.entries[ex.id] = { kg: ex.type==="bw" ? null : S.weights[ex.id],
+      const seedKg = ex.test ? Math.max(mround(epley(ex.test[0], ex.test[1]) * ex.pct, 2.5), 2.5) : null;
+      live.entries[ex.id] = { kg: ex.type==="bw" ? null : (S.weights[ex.id] != null ? S.weights[ex.id] : seedKg),
                               reps: new Array(ex.sets).fill(null),
                               rpe:  new Array(ex.sets).fill(null) };
     }
