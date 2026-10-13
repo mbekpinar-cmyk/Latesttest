@@ -921,6 +921,7 @@ const blank = () => ({
   weights: {},
   incs: {},
   steps: {},                         // exId -> makinenin gercek kademesi (kg)
+  ladders: {},                       // exId -> pinli makinedeki gercek kilo listesi (kg, artan sirada)
   migratedCoarseSteps: false,
   nextIdx: 0,
   sessions: [],
@@ -984,7 +985,45 @@ function incOf(ex){ return S.incs[ex.id] != null ? S.incs[ex.id] : ex.inc; }
    Pinli makinelerde 1.25 / 2.5 gibi araliklar fiziksel olarak yok.
    stepOf() o makinede gercekten secilebilen en kucuk adimi verir;
    tanimlanmamissa normal artis miktarina duser (eski davranis).      */
-function stepOf(ex){
+/* ---- KILO LISTESI (pinli makine) -------------------------------------
+   Bazi makinelerde (Cybex / True, lb tabanli) pim kademeleri duzgun bir
+   aralik degil: 34, 40, 46, 52 gibi. Kullanici o makinenin gercek listesini
+   Ayarlar'dan girer; artis/azalis ve -/+ dugmeleri sadece bu degerler
+   arasinda gezer. Liste yoksa eski davranis aynen devam eder. */
+const r2 = v => Math.round(v*100)/100;
+function ladderOf(ex){
+  const l = S.ladders && S.ladders[ex.id];
+  return (Array.isArray(l) && l.length >= 2) ? l : null;
+}
+function nextRung(l, cur){ for(let i=0;i<l.length;i++) if(l[i] > cur + 0.001) return l[i]; return null; }
+function prevRung(l, cur){ for(let i=l.length-1;i>=0;i--) if(l[i] < cur - 0.001) return l[i]; return null; }
+function nearestRung(l, v){ return l.reduce((b,x) => Math.abs(x-v) < Math.abs(b-v) ? x : b, l[0]); }
+/* Ham karardan cikan agirligi makinede gercekten takilabilir bir degere oturt.
+   Artis: cur'un ustundeki en yakin pim. Azalis: hedefin altindaki en yakin pim. */
+function snapToLadder(l, cur, w){
+  if(w == null || cur == null || Math.abs(w-cur) < 0.001) return w;
+  if(w > cur){
+    const ups = l.filter(x => x > cur + 0.001);
+    if(!ups.length) return cur;
+    return nearestRung(ups, w);
+  }
+  const downs = l.filter(x => x <= w + 0.001);
+  if(downs.length) return downs[downs.length-1];
+  const below = l.filter(x => x < cur - 0.001);
+  return below.length ? below[0] : cur;
+}
+/* Bu makinede bir sonraki pim ile mevcut arasindaki fark */
+function stepOf(ex, cur){
+  const l = ladderOf(ex);
+  if(l){
+    const c = cur != null ? cur : S.weights[ex.id];
+    if(c != null){
+      const n = nextRung(l, c), p = prevRung(l, c);
+      if(n != null) return r2(n - c);
+      if(p != null) return r2(c - p);
+    }
+    return r2(l[1]-l[0]);
+  }
   if(S.steps && S.steps[ex.id] != null) return S.steps[ex.id];
   return ex.step != null ? ex.step : incOf(ex);
 }
@@ -992,7 +1031,7 @@ function stepOf(ex){
    Plakali makinelerde 1.25'lik plakayla istedigin araligi kurabilirsin,
    orada "kademe" diye bir kisit yok — kaba mod onlara ASLA uygulanmaz. */
 function hasStep(ex){
-  return (S.steps && S.steps[ex.id] != null) || ex.step != null;
+  return !!ladderOf(ex) || (S.steps && S.steps[ex.id] != null) || ex.step != null;
 }
 const snapStep = (v, st) => st > 0 ? Math.max(st, Math.round(v/st)*st) : v;
 
@@ -1005,7 +1044,7 @@ function isCoarse(ex, cur){
   if(!hasStep(ex)) return false;
   const w = cur != null ? cur : S.weights[ex.id];
   if(w == null || w <= 0) return false;
-  return stepOf(ex) / w > 0.10;
+  return stepOf(ex, w) / w > 0.10;
 }
 
 function seedWeights(tests){
@@ -1022,6 +1061,16 @@ function seedWeights(tests){
    mantik sapmasi olmasin diye. */
 function progressDecision(ex, reps, rpeArr, cur){
   if(cur === undefined) cur = S.weights[ex.id];
+  const d = progressDecisionRaw(ex, reps, rpeArr, cur);
+  /* Pinli makinede kilo listesi tanimliysa sonucu gercek pime oturt */
+  const l = ladderOf(ex);
+  if(l && d.weight != null && cur != null && d.tier !== "coarse_step_up"){
+    const snapped = snapToLadder(l, cur, d.weight);
+    if(Math.abs(snapped - d.weight) > 0.001){ d.rawWeight = d.weight; d.weight = snapped; }
+  }
+  return d;
+}
+function progressDecisionRaw(ex, reps, rpeArr, cur){
   if(cur == null) return {weight:null, tier:"nodata"};
   const inc = incOf(ex);
   const rpeVals = (rpeArr||[]).filter(v=>v!=null);
@@ -1084,7 +1133,7 @@ function progressDecision(ex, reps, rpeArr, cur){
        dolunca TEK SEFERDE tam bir kademe atlanir ve tekrarlar tabana doner.
        25 kg x 15 tekrar ile 30 kg x 8 tekrar birbirine cok yakin is. */
     if(isCoarse(ex, cur)){
-      const st = stepOf(ex);
+      const st = stepOf(ex, cur);
       if(filled.length < ex.sets){
         const worstP = filled.length ? Math.min(...filled) : 0;
         return {weight:cur, tier:"coarse_partial", coarse:true, step:st,
@@ -1098,7 +1147,14 @@ function progressDecision(ex, reps, rpeArr, cur){
           return {weight:cur, tier:"coarse_hold", coarse:true, step:st,
                   worst:worstC, minReps, maxReps, nextTarget:maxReps, avgRpe};
         }
-        return {weight:snapStep(cur + st, st), tier:"coarse_step_up", coarse:true, step:st,
+        const lad = ladderOf(ex);
+        const up = lad ? nextRung(lad, cur) : null;
+        if(lad && up == null){   // listenin en tepesindesin — daha yuksek pim yok
+          return {weight:cur, tier:"coarse_hold", coarse:true, step:st,
+                  worst:worstC, minReps, maxReps, nextTarget:maxReps, avgRpe, topOfLadder:true};
+        }
+        const wNext = lad ? up : snapStep(cur + st, st);
+        return {weight:wNext, tier:"coarse_step_up", coarse:true, step:st,
                 worst:worstC, minReps, maxReps, nextTarget:minReps, avgRpe};
       }
       /* Tavan dolmadi — agirlik ayni, hedef en zayif setten bir fazlasi. */
@@ -1159,7 +1215,7 @@ function warmups(ex){
    PLAKA HESAPLAYICI
    ========================================================= */
 /* Dumbbell ve vücut ağırlığı hareketlerinde plaka takmıyorsun */
-const NO_PLATES = ["b5","c5","b6","c6"];
+const NO_PLATES = ["b5","c5","b6","c6","b3","b4","a6"];   // b3/b4/a6: pinli makine (Cybex/True) — ekstra plaka yok
 const ALL_PLATES = [25,20,15,10,5,2.5,2,1.25,1];
 /* Plakalarda 1.25 gibi degerler var — fmtKg 1 ondalikla yuvarlayip 1.3 yapiyor */
 const fmtP = v => (Math.round(v*100)/100).toString();
@@ -1704,6 +1760,7 @@ window.startSession = function(){
   const key = ORDER[S.nextIdx % 3];
   const entries = {};
   PROGRAM[key].ex.forEach(ex => {
+    if(ex.type !== "bw") snapWeightToLadder(ex.id);   // pim listesi varsa, planli kilo gercek pime otursun
     entries[ex.id] = { kg: ex.type==="bw" ? null : S.weights[ex.id],
                        reps: new Array(ex.sets).fill(null),
                        rpe:  new Array(ex.sets).fill(null) };
@@ -1874,10 +1931,15 @@ function renderDetail(){
     </div>
 
     ${ex.type!=="bw" ? `<div class="stepper">
-      <button onclick="adjustKg(-${isCoarse(ex, en.kg) ? stepOf(ex) : 2.5})">−</button>
-      <div class="val"><span class="n">${fmtKg(en.kg)}</span><span class="u">kg</span></div>
-      <button onclick="adjustKg(${isCoarse(ex, en.kg) ? stepOf(ex) : 2.5})">+</button>
+      <button onclick="adjustKg(-1)">−</button>
+      <div class="val" onclick="editKg()" style="cursor:pointer"><span class="n">${fmtKg(en.kg)}</span><span class="u">kg ✎</span></div>
+      <button onclick="adjustKg(1)">+</button>
     </div>
+    <div class="wuplates" style="margin-top:-6px;margin-bottom:10px">${
+      ladderOf(ex)
+        ? 'Pim listesi: ' + ladderOf(ex).map(fmtKg).join(' · ') + ' — −/+ listede gezer, kiloya dokunarak başka bir değer yazabilirsin'
+        : 'Kiloya dokunarak makinedeki gerçek değeri elle yazabilirsin' + (loadTypeOf(ex.id)==='off' ? ' (Ayarlar → Pim listesi ile −/+ makinene uyar)' : '')
+    }</div>
     ${plateCard(ex, en.kg)}` : '<div class="spacer"></div>'}
 
     ${padTarget.mode === 'reps' ? renderNumpad(ex, en) : renderRpePanel(ex, en)}
@@ -1897,10 +1959,37 @@ window.selectSet = function(i, mode){
   render();
 };
 
-window.adjustKg = function(delta){
+/* dir = +1 / -1. Pim listesi varsa bir onceki/sonraki pime gider; yoksa
+   kaba kademede tam kademe, diger durumda 2.5 kg. */
+window.adjustKg = function(dir){
   const en = live.entries[detailExId];
+  const ex = findEx(detailExId);
   if(en.kg == null) return;
-  en.kg = Math.max(0, Math.round((en.kg + delta)*2)/2);
+  const l = ladderOf(ex);
+  if(l){
+    const t = dir > 0 ? nextRung(l, en.kg) : prevRung(l, en.kg);
+    if(t != null) en.kg = t;
+  } else {
+    const st = isCoarse(ex, en.kg) ? stepOf(ex, en.kg) : 2.5;
+    en.kg = Math.max(0, r2(en.kg + dir*st));
+  }
+  save();
+  render();
+};
+/* Makinedeki gercek degeri elle yaz (46, 45.36, 46,5 …) */
+window.editKg = function(){
+  const en = live.entries[detailExId];
+  const ex = findEx(detailExId);
+  const raw = prompt("Bu hareket için kaç kg kullandın?", fmtKg(en.kg));
+  if(raw == null) return;
+  const n = pf(raw);
+  if(!(n > 0) || n > 1000){ alert("Geçerli bir sayı yaz (ör. 46 veya 45.36)."); return; }
+  en.kg = r2(n);
+  const l = S.ladders && S.ladders[ex.id];
+  if(l && l.length && l.indexOf(en.kg) === -1){
+    if(confirm(en.kg + " kg pim listesinde yok. Listeye eklensin mi?")) addRung(ex.id, en.kg, true);
+  }
+  save();
   render();
 };
 
@@ -2027,11 +2116,13 @@ window.finishSession = function(){
     if(Array.isArray(en.rest) && en.rest.some(v=>v!=null)) rec.entries[ex.id].rest = en.rest.slice();
     if(ex.type === "bw") return;
     if(en.reps.every(r=>r==null)) return;
-    const next = progress(ex, en.reps, en.rpe);
+    /* Ilerleme, PLANLANAN degil GERCEKTEN kaldirilan kiloya gore hesaplanir */
+    const lifted = en.kg != null ? en.kg : S.weights[ex.id];
+    const next = progressDecision(ex, en.reps, en.rpe, lifted).weight;
     const rpeVals = en.rpe.filter(v=>v!=null);
     const avgRpe = rpeVals.length ? Math.round(rpeVals.reduce((a,b)=>a+b,0)/rpeVals.length*10)/10 : null;
     if(next != null){
-      changes.push({n:ex.n, from:S.weights[ex.id], to:next, avgRpe});
+      changes.push({n:ex.n, from:lifted, to:next, avgRpe});
       S.weights[ex.id] = next;
     }
   });
@@ -3038,17 +3129,37 @@ function renderSettings(){
     const rows = PROGRAM[k].ex.map(ex=>{
       if(ex.type==="bw") return `<div class="settings-ex"><div class="nm">${esc(ex.n)}<small>vücut ağırlığı</small></div></div>`;
       const coarse = isCoarse(ex);
+      const lad = ladderOf(ex);
       const pinned = hasStep(ex);
       const sub = coarse
         ? `<small style="color:var(--amber)">Kaba kademe · ${fmtKg(stepOf(ex))} kg · tekrarla ilerler</small>`
-        : `<small>Artış: ${fmtKg(incOf(ex))} kg${pinned?` · kademe ${fmtKg(stepOf(ex))} kg`:''}</small>`;
-      return `<div class="settings-ex">
+        : `<small>Artış: ${fmtKg(incOf(ex))} kg${pinned&&!lad?` · kademe ${fmtKg(stepOf(ex))} kg`:''}</small>`;
+      const rungs = (S.ladders && S.ladders[ex.id]) || [];
+      const open = ladderOpenId === ex.id;
+      const ladSummary = rungs.length
+        ? `Pim listesi: ${rungs.map(fmtKg).join(" · ")}${rungs.length<2?" (en az 2 değer gerek)":""}`
+        : `Pim listesi ekle (pinli makine)`;
+      const ladEditor = open ? `<div class="ladbox" style="padding:4px 0 12px">
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+            ${rungs.map(r=>`<button onclick="removeRung('${ex.id}',${r})" style="font-size:13px;font-weight:800;padding:7px 11px;border-radius:9px;background:var(--amber);color:#3A2604;border:none">${fmtKg(r)} ×</button>`).join("") || `<span style="font-size:12px;color:var(--faint)">Henüz değer yok</span>`}
+          </div>
+          <div style="display:flex;gap:8px">
+            <input id="rung_${ex.id}" type="text" inputmode="decimal" placeholder="örn. 46 veya 45,36" style="flex:1;width:auto"
+                   onkeydown="if(event.key==='Enter'){addRungFromInput('${ex.id}')}">
+            <button class="btn sm" style="width:auto;padding:9px 16px" onclick="addRungFromInput('${ex.id}')">Ekle</button>
+          </div>
+          <p class="note" style="margin-top:6px">Makinedeki pim etiketlerinde gördüğün kiloları tek tek ekle (kg). Boş bırakırsan serbest kalır. Listeyi girince artış/azalış hep bu değerlere oturur.</p>
+        </div>` : "";
+      return `<div class="settings-ex" style="${open||rungs.length||NO_PLATES.indexOf(ex.id)!==-1?'border-bottom:none;padding-bottom:2px':''}">
         <div class="nm">${esc(ex.n)}${sub}</div>
         <div class="in">
           <input type="text" inputmode="decimal" step="0.5" value="${S.weights[ex.id]??''}" onchange="setW('${ex.id}',this.value)" placeholder="kg">
           <input type="text" inputmode="decimal" step="0.5" value="${incOf(ex)}" onchange="setInc('${ex.id}',this.value)" placeholder="artış">
-          ${pinned?`<input type="text" inputmode="decimal" step="0.5" value="${stepOf(ex)}" onchange="setStep('${ex.id}',this.value)" placeholder="kademe">`:''}
-        </div></div>`;
+          ${pinned&&!lad?`<input type="text" inputmode="decimal" step="0.5" value="${stepOf(ex)}" onchange="setStep('${ex.id}',this.value)" placeholder="kademe">`:''}
+        </div></div>
+        ${(open||rungs.length||NO_PLATES.indexOf(ex.id)!==-1) ? `<div style="padding:0 0 10px;border-bottom:1px solid var(--line)">
+          <button onclick="toggleLadder('${ex.id}')" style="background:none;border:none;color:${rungs.length>=2?'var(--amber)':'var(--muted)'};font-size:12px;font-weight:700;padding:4px 0;text-align:left">${ladSummary} ${open?'▴':'▾'}</button>
+          ${ladEditor}</div>` : ''}`;
     }).join("");
     return `<h2>${PROGRAM[k].name}</h2><div class="card" style="padding:4px 16px">${rows}</div>`;
   }).join("");
@@ -3074,6 +3185,7 @@ function renderSettings(){
           onclick="toggleBell()">${S.restBell?'Açık':'Kapalı'}</button></div></div>
     </div>
     <p class="note">Mola zili: süre bitince ses çalar. Açıkken mola boyunca çok kısık bir ses çalar — bu olmadan iPhone sayfayı dondurur ve zil hiç çalmaz. Podcast veya müziğini duraklatabilir, telefon sessiz moddayken de duyulmaz. Sayaç, zil kapalıyken de doğru çalışır.</p>
+    <p class="note">Pinli makineler (Seated Cable Row, Reverse Pec Deck, Ab Crunch, Biceps, Triceps…): her satırın altındaki "Pim listesi" bağlantısından makinedeki gerçek kiloları tek tek ekle (ör. 34, 40, 46, 52). Liste girilince −/+ ve otomatik artış/azalış sadece bu değerler arasında gezer. Antrenman sırasında kiloya dokunarak da istediğin değeri elle yazabilirsin.</p>
     <p class="note">Ağırlık: bir sonraki antrenmanda kullanacağın kilo. Artış: hedefi tutturduğunda eklenecek kilo. Kademe alanı sadece pinli makinelerde (Biceps, Triceps) görünür — o makinede gerçekten seçilebilen en küçük adım. Kademe, ağırlığın %10'undan büyükse hareket kaba kademe moduna geçer: ağırlık her antrenman artmaz, önce tekrarlar tavana çıkar, sonra tek seferde bir kademe atlanır. Plakalı makineler bu moda hiç girmez.</p>
     ${blocks}
     <div class="divider"></div>
@@ -3108,6 +3220,44 @@ window.toggleBell = function(){
   if(S.restBell){ keepAliveOn(); setTimeout(()=>{ if(!restTimer) keepAliveOff(); }, 400); }
   else keepAliveOff();
   render();
+};
+/* ---- Pim listesi duzenleme ---- */
+let ladderOpenId = null;
+window.toggleLadder = function(id){ ladderOpenId = ladderOpenId === id ? null : id; render(); };
+/* Liste degisince, mevcut planli agirlik listede degilse en yakin pime otur */
+function snapWeightToLadder(id){
+  const ex = findExAny(id);
+  const l = ex && ladderOf(ex);
+  if(!l || S.weights[id] == null) return;
+  if(l.indexOf(S.weights[id]) === -1) S.weights[id] = nearestRung(l, S.weights[id]);
+}
+function addRung(id, kg, silent){
+  if(!(kg > 0) || kg > 1000) return false;
+  if(!S.ladders) S.ladders = {};
+  const l = (S.ladders[id] || []).slice();
+  kg = r2(kg);
+  if(l.indexOf(kg) === -1) l.push(kg);
+  l.sort((a,b)=>a-b);
+  S.ladders[id] = l;
+  save();
+  if(!silent) render();
+  return true;
+}
+window.addRungFromInput = function(id){
+  const el = document.getElementById("rung_"+id);
+  if(!el) return;
+  /* "34 40 46" gibi birden fazla deger yapistirilirsa hepsini ekle (ondalik icin nokta/virgul) */
+  const parts = String(el.value).trim().split(/[\s;]+/).filter(Boolean);
+  if(!parts.length) return;
+  let bad = false;
+  parts.forEach(p => { const n = pf(p); if(!addRung(id, n, true)) bad = true; });
+  if(bad) alert("Geçersiz değer var. Sadece sayı yaz (ör. 46 veya 45,36). Birden fazla değeri boşlukla ayır.");
+  render();
+};
+window.removeRung = function(id, kg){
+  const l = ((S.ladders||{})[id] || []).filter(x => Math.abs(x-kg) > 0.001);
+  if(l.length) S.ladders[id] = l; else delete S.ladders[id];
+  save(); render();
 };
 window.setW = function(id,v){ const n=pf(v); if(n>0){S.weights[id]=n; save();} };
 window.setInc = function(id,v){ const n=pf(v); if(n>0){S.incs[id]=n; save(); render();} };
@@ -3474,11 +3624,34 @@ function seedMissingWeights(){
   if(changed) save();
 }
 
+/* TEK SEFERLIK DUZELTME — 2026-10-13 Seated Cable Row.
+   Makinede 46 kg takiliydi ama uygulamada elle girilemedigi icin 47.5
+   kaydedilmisti (ve sonraki agirlik bu yanlis kilodan hesaplanmisti).
+   Kaydi 46'ya cevirip sonraki agirligi gercek kilodan yeniden hesapla. */
+function migratePinFix1(){
+  if(S.migratedPinFix1) return;
+  if(!S.setup){ S.migratedPinFix1 = true; return; }
+  const sess = (S.sessions||[]).find(s => s.date === "2026-10-13" && s.w === "B" && s.entries && s.entries.b3 && s.entries.b3.kg === 47.5);
+  if(sess){
+    const e = sess.entries.b3;
+    e.kg = 46;
+    const ex = findExAny("b3");
+    if(ex){
+      const d = progressDecision(ex, e.reps, e.rpe, 46);
+      /* Sonraki antrenman bu seanstan sonra baska bir B seansi yapilmadiysa guncelle */
+      const laterB = S.sessions.some(s => s !== sess && s.date > sess.date && s.entries && s.entries.b3);
+      if(!laterB && d.weight != null) S.weights.b3 = d.weight;
+    }
+  }
+  S.migratedPinFix1 = true;
+}
+
 function runMigrations(){
   migrateSideToTotal();   // once birim duzeltmesi, sonra digerleri
   migrateB2u();
   migrateTieredRecalibration();
   migrateCoarseSteps();
+  migratePinFix1();
   seedMissingWeights();
   save();
 }
