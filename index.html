@@ -3464,7 +3464,9 @@ document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) renderR
 let kaEl = null, kaUrl = null, actx = null;
 function silentUrl(){
   if(kaUrl) return kaUrl;
-  const sr = 8000, n = sr/2, b = new Uint8Array(44+n);
+  /* 30 sn: iOS cok kisa (yarim saniyelik) sesleri "gercek medya" saymiyor ve
+     kilit ekranina / Dynamic Island'a koymuyor. 8 kHz 8-bit mono = ~240 KB, sadece bellekte. */
+  const sr = 8000, n = sr*30, b = new Uint8Array(44+n);
   const dv = new DataView(b.buffer);
   const put = (o,s)=>{ for(let i=0;i<s.length;i++) b[o+i]=s.charCodeAt(i); };
   put(0,"RIFF"); dv.setUint32(4, 36+n, true); put(8,"WAVEfmt ");
@@ -3478,7 +3480,7 @@ function silentUrl(){
 }
 function keepAliveOn(){
   try{
-    if(!kaEl){ kaEl = new Audio(silentUrl()); kaEl.loop = true; kaEl.volume = 0.02; }
+    if(!kaEl){ kaEl = new Audio(silentUrl()); kaEl.loop = true; kaEl.volume = 0.02; kaEl.preload = "auto"; kaEl.setAttribute("playsinline",""); }
     kaEl.play().catch(()=>{});
     /* Ses motorunu dokunma anında ac — zil vakti gelince hazir olsun. */
     const C = window.AudioContext || window.webkitAudioContext;
