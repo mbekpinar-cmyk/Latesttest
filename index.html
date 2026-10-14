@@ -560,6 +560,7 @@ const CUES_TR = {
   c3:["Göğsünü desteğe yasla, gövde sabit","Dirsekleri gövdeye yakın geriye çek","Kürek kemiklerini sık"],
   c4:["Dirsekler hafif bükük ve sabit","Göğsünü açarak kolları birleştir","Ortada bir saniye sık"],
   c5:["Dirsekler gövdene yapışık, sabit kalsın","Sadece ön kolun hareket etsin","Aşağıda kolları tam uzat"],
+  c7:["Ayak tabanının ön kısmı basamağın kenarında, dizler düz","Altta topukları iyice indir, 1–2 sn esneyerek bekle","Hareketin alt yarısına odaklan, sekme yapma"],
   c6:["Vücudun baştan topuğa düz çizgi","Kalçanı yukarı kaldırma, çökertme","Karnını ve kalçanı sık, normal nefes al"],
 };
 const CUES_EN = {
@@ -582,6 +583,7 @@ const CUES_EN = {
   c3:["Chest on the pad, torso still","Pull the elbows back close to your body","Squeeze the shoulder blades"],
   c4:["Elbows slightly bent and fixed","Open the chest and bring the arms together","Squeeze for a second in the middle"],
   c5:["Elbows glued to your sides and still","Only your forearms should move","Fully extend the arms at the bottom"],
+  c7:["Balls of the feet on the edge of the step, knees straight","Drop the heels deep and hold the stretch for 1–2 s","Focus on the bottom half, no bouncing"],
   c6:["Straight line from head to heels","Don't lift the hips up, don't let them sag","Brace abs and glutes, breathe normally"],
 };
 const CUES_FI = {
@@ -604,6 +606,7 @@ const CUES_FI = {
   c3:["Rinta tukea vasten, vartalo paikallaan","Vedä kyynärpäät taakse lähelle vartaloa","Purista lapaluita"],
   c4:["Kyynärpäät hieman koukussa ja paikallaan","Avaa rintakehä ja tuo kädet yhteen","Purista sekunti keskellä"],
   c5:["Kyynärpäät kiinni kyljissä ja paikallaan","Vain kyynärvarsien pitää liikkua","Ojenna kädet täysin alhaalla"],
+  c7:["Päkiät korokkeen reunalla, polvet suorina","Laske kantapäät syvälle ja pidä venytys 1–2 s","Keskity liikkeen alaosaan, älä pompota"],
   c6:["Suora linja päästä kantapäihin","Älä nosta lantiota ylös äläkä anna sen painua","Jännitä vatsa ja pakarat, hengitä normaalisti"],
 };
 let CUES = CUES_TR;
@@ -878,6 +881,30 @@ const DRAW = {
       + R(fx-12,fy-3,26,7,ACC,3);                    // bar
   },
 
+  /* Standing Calf Raise — ayakta, dizler düz, topuk iniş/çıkış */
+  c7(t){
+    // t=0 topuk aşağıda (esneme), t=1 parmak ucunda
+    const T=[116,116], fl=22;                                // parmak ucu (pivot), ayak boyu
+    const ang=d=>lerp(-18,26,d)*Math.PI/180;
+    const heelAt=d=>[T[0]-fl*Math.cos(ang(d)), T[1]+fl*Math.sin(-ang(d))];
+    const hl=heelAt(t), h0=heelAt(0), h1=heelAt(1);
+    const ax=hl[0]+5, ay=hl[1]-6;                            // ayak bileği
+    const kn=[ax,ay-24], hip=[ax,ay-48], sh=[ax+1,ay-74];     // dizler düz, gövde dik
+    return R(24,128,160,4,MACH,2)                              // zemin
+      + R(104,116,44,12,MACH,2)                                // basamak
+      + R(150,20,9,108,MACH,3)                                 // makine direği
+      + L(sh[0]+10,sh[1]-3,152,sh[1]-3,4,MACH)                  // omuz pedi kolu
+      + P(`M${(h0[0]-6).toFixed(1)} ${h0[1].toFixed(1)} L${(h1[0]-6).toFixed(1)} ${h1[1].toFixed(1)}`,2,ACC,"4 4")
+      + C(sh[0],sh[1]-14,9)                                    // baş
+      + L(sh[0],sh[1],hip[0],hip[1],6)                         // gövde
+      + L(hip[0],hip[1],kn[0],kn[1],6)                         // uyluk
+      + L(kn[0],kn[1],ax,ay,5)                                 // baldır
+      + L(hl[0],hl[1],T[0],T[1],5)                             // ayak
+      + C(ax,ay,3.5,MACH)
+      + L(sh[0],sh[1]+4,sh[0]+12,sh[1]+16,5)                   // kol
+      + R(sh[0]-12,sh[1]-7,26,7,ACC,3);                        // omuz pedi
+  },
+
   /* Plank — statik, hafif nefes salınımı */
   c6(t){
     const s=Math.sin(t*Math.PI*2)*1.5;
@@ -942,6 +969,10 @@ const PROGRAM = {
     {id:"c3", n:"Machine Row",          type:"sec4", sets:4, scheme:"4x10",    target:10, inc:2.5, pct:0.60, test:[40,8]},
     {id:"c4", n:"Pec Deck (Chest Fly)",  type:"acc",  sets:3, scheme:"3x10-14", total:42, min:10, max:14,  inc:2.5, pct:0.55, test:[25,10]},
     {id:"c5", n:"Triceps Makinesi",      type:"acc",  sets:3, scheme:"3x8-15",  total:45, min:8, max:15,  inc:2.5, step:5, pct:0.55, test:[20,8]},
+    /* Baldir — plakali ayakta calf raise (dizler duz -> gastrocnemius tam esner).
+       Kassiano 2023 / Kinoshita 2023: uzamis pozisyonda calisma > kisa pozisyon.
+       inc 5: acc_small yarim artis 2.5 kg verir, plakayla yuklenebilir kalir. */
+    {id:"c7", n:"Standing Calf Raise",   type:"acc",  sets:3, scheme:"3x10-20", total:60, min:10, max:20,  inc:5,   pct:0.55, test:[60,15]},
     AB_CRUNCH,
   ]},
 };
@@ -965,13 +996,14 @@ const REST = { main:180, sec:120, sec4:120, acc:90, bw:60 };
 const TARGET_RPE = {
   a1:null, a2:8, a3:8, a4:9, a5:9, a6:9,
   b1:null, b2:8, b2u:8, b3:8, b4:9, b5:8, b6:9,
-  c1:null, c2:8, c2u:8, c3:8, c4:8, c5:8, c6:9,
+  c1:null, c2:8, c2u:8, c3:8, c4:8, c5:8, c6:9, c7:9,
 };
 let RPE_LABELS = {};
 /* Dil degisince adlari/ipuclarini/etiketleri yeniden kur */
 const EX_NAMES = {
   b2u:{tr:"Üst Göğüs Makinesi (Eğik)", en:"Incline Chest Press Machine", fi:"Vinopenkkilaite (ylärinta)"},
   c5:{tr:"Triceps Makinesi", en:"Triceps Machine", fi:"Ojentajalaite"},
+  c7:{tr:"Ayakta Baldır Makinesi", en:"Standing Calf Raise", fi:"Pohjenousu seisten"},
 };
 const ARCH_WORD = {tr:"arşiv", en:"archived", fi:"arkistoitu"};
 function applyLang(){
