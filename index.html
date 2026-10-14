@@ -360,6 +360,24 @@ h1{font-size:28px;font-weight:800;letter-spacing:-.03em;margin:6px 0 2px;line-he
 .hcard{background:var(--card);border:1px solid var(--line);border-radius:15px;
   padding:15px 16px;margin-bottom:10px;cursor:pointer}
 .hcard:active{background:var(--card-2)}
+/* Gecmis — galeri gibi coklu secim */
+.hhead{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.hselbtn{background:none;border:none;color:var(--amber);font:inherit;font-size:14px;font-weight:700;padding:10px 2px;cursor:pointer}
+.hcard.selmode{display:flex;align-items:center;gap:12px}
+.hcard.selmode .hd{flex:1;min-width:0}
+.hcard.picked{border-color:var(--amber)}
+.hpick{flex:none;width:22px;height:22px;border-radius:50%;border:1.6px solid var(--faint);display:grid;place-items:center}
+.hcard.picked .hpick{background:var(--amber);border-color:var(--amber);color:var(--bg)}
+.hpick svg{width:14px;height:14px}
+.hselbar{position:fixed;left:0;right:0;bottom:calc(var(--nav-h) + 10px);z-index:79;padding:0 18px}
+.hselbar .in{max-width:604px;margin:0 auto;background:var(--card-2);border:1px solid var(--line-hi);border-radius:16px;
+  padding:10px 10px 10px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.hselbar .cnt{font-size:13px;color:var(--muted);font-weight:600}
+.hselbar .del{background:transparent;color:var(--red);border:1px solid var(--line-hi);border-radius:12px;
+  font:inherit;font-size:14px;font-weight:700;padding:10px 16px;display:flex;align-items:center;gap:6px;cursor:pointer}
+.hselbar .del[aria-disabled="true"]{color:var(--faint)}
+.hselbar .del svg{width:16px;height:16px}
+body.hselecting #app{padding-bottom:calc(var(--nav-h) + 90px)}
 .hcard .hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .hcard .hd .n{font-size:15.5px;font-weight:700}
 .hcard .hd .d{font-size:11px;color:var(--faint);font-family:var(--fn);margin-top:3px}
@@ -1614,7 +1632,7 @@ function render(){
   renderNav();
   renderRest();
 }
-window.go = function(v){ view=v; window.scrollTo(0,0); render(); };
+window.go = function(v){ if(v !== "history") histSel = null; view=v; window.scrollTo(0,0); render(); };
 
 /* =========================================================
    NAVBAR
@@ -1786,6 +1804,7 @@ function iconSVG(name){
     dumbbell: '<rect x="2" y="9" width="3.4" height="6" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="18.6" y="9" width="3.4" height="6" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="6.4" y="6.5" width="3.2" height="11" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14.4" y="6.5" width="3.2" height="11" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="9.6" y1="12" x2="14.4" y2="12" stroke="currentColor" stroke-width="1.6"/>',
     target: '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>',
     check: '<polyline points="5 12.5 10 17.5 19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>',
+    trash: '<path d="M4.5 7h15M10 11v6M14 11v6M6 7l1 12.2a1.6 1.6 0 001.6 1.3h6.8a1.6 1.6 0 001.6-1.3L18 7M9 7V4.8c0-.7.5-1.3 1.2-1.3h3.6c.7 0 1.2.6 1.2 1.3V7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
     sleep: '<path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
     soreness: '<path d="M13 3.5c2 2.5 5 4.5 5 8.5a6 6 0 01-12 0c0-2.5 1.2-4 2.5-5.8C9.7 4.6 11 3.8 13 3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
     energy: '<polygon points="13 2.5 4 13.5 11 13.5 10.4 21.5 20 10 12.6 10 13 2.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
@@ -2128,7 +2147,7 @@ window.enterRep = function(v){
   save();
   if(wasEmpty){
     /* yeni set girisi — mola baslat ve RPE'ye gec */
-    startRest(REST[ex.type] || 90);
+    startRest(REST[ex.type] || 90, ex.n);
     padTarget.mode = 'rpe';
   }
   /* duzeltme ise: mola baslatma, ekranda kal ki sonucu gorebilsin */
@@ -2422,6 +2441,8 @@ function sessionAvgRpe(s){
 }
 
 function renderHistoryScreen(){
+  if(histSel && !S.sessions.length) histSel = null;
+  document.body.classList.toggle("hselecting", !!histSel);
   if(!S.sessions.length){
     $app.innerHTML = `
       <div class="hero"><div class="name">${T("Antrenmanlar")}</div></div>
@@ -2437,7 +2458,9 @@ function renderHistoryScreen(){
     const wo = programOf(s.w);
     const vol = sessionVolume(s);
     const avgRpe = sessionAvgRpe(s);
-    const expanded = historyOpen === realIdx;
+    const selMode = !!histSel;
+    const picked = selMode && histSel.has(realIdx);
+    const expanded = !selMode && historyOpen === realIdx;
     const ids = wo.ex.map(e=>e.id).concat(Object.keys(s.entries).filter(id=>wo.ex.every(e=>e.id!==id)));
     const detailRows = expanded ? ids.map(id=>{
       const ex = findExAny(id); if(!ex) return "";
@@ -2451,6 +2474,19 @@ function renderHistoryScreen(){
         ${changeLine(ex, s, realIdx)}
       </div>`;
     }).join("") : "";
+    if(selMode){
+      return `<div class="hcard selmode${picked?' picked':''}" onclick="toggleHistPick(${realIdx})" role="checkbox" aria-checked="${picked}">
+      <div class="hpick">${picked?iconSVG('check'):''}</div>
+      <div class="hd">
+        <div style="flex:1"><div class="n">${esc(wo.name)}</div>
+          <div class="d">${trDateLong(s.date)}</div></div>
+        <div style="text-align:right">
+          <div class="v">${Math.round(vol).toLocaleString(LOCALE[LANG])} kg</div>
+          ${avgRpe!=null?`<div class="hrpe">${T("Ort. RPE")} ${avgRpe}</div>`:''}
+        </div>
+      </div>
+    </div>`;
+    }
     return `<div class="hcard" onclick="toggleHist(${realIdx})">
       <div class="hd">
         <div style="flex:1"><div class="n">${esc(wo.name)}</div>
@@ -2463,12 +2499,87 @@ function renderHistoryScreen(){
       ${expanded ? detailRows : ''}
     </div>`;
   }).join("");
+  const n = histSel ? histSel.size : 0;
+  const bar = histSel ? `<div class="hselbar"><div class="in">
+      <span class="cnt">${n ? T("{n} antrenman seçildi",{n}) : T("Silmek istediklerini seç")}</span>
+      <button class="del" aria-disabled="${n?'false':'true'}" onclick="deletePickedSessions()">${iconSVG('trash')}${T("Sil")}</button>
+    </div></div>` : "";
   $app.innerHTML = `
-    <div class="hero"><div class="name">${T("Antrenmanlar")}</div></div>
+    <div class="hero hhead"><div class="name">${T("Antrenmanlar")}</div>
+      <button class="hselbtn" onclick="toggleHistSelect()">${histSel ? T("İptal") : T("Seç")}</button></div>
     ${items}
+    ${bar}
   `;
 }
 window.toggleHist = function(i){ historyOpen = historyOpen===i ? null : i; render(); };
+
+/* ---- Gecmis antrenmanlari secip silme (galeri gibi) ---- */
+let histSel = null;   // null = normal mod, Set = secim modu (gercek session index'leri)
+window.toggleHistSelect = function(){ histSel = histSel ? null : new Set(); historyOpen = null; render(); };
+window.toggleHistPick = function(i){
+  if(!histSel) return;
+  if(histSel.has(i)) histSel.delete(i); else histSel.add(i);
+  render();
+};
+window.deletePickedSessions = function(){
+  if(!histSel || !histSel.size) return;
+  const n = histSel.size;
+  const msg = n === 1 ? T("Bu antrenman silinecek. Bu geri alınamaz.\n\nSilinsin mi?")
+                      : T("{n} antrenman silinecek. Bu geri alınamaz.\n\nSilinsin mi?",{n});
+  if(!confirm(msg)) return;
+  deleteSessions(histSel);
+  histSel = null; historyOpen = null;
+  render();
+};
+
+/* Silinen antrenmanlar "hic yapilmamis gibi" olsun:
+   1) Bir hareketin EN SON kaydi silindiyse, o kaydin urettigi sonraki
+      agirlik geri alinir — kalan gecmisteki son kayittan yeniden hesaplanir.
+      Agirlik sonradan elle degistirildiyse (silinen kaydin urettigi degerle
+      ayni degilse) dokunulmaz.
+   2) En son antrenman(lar) silindiyse siradaki antrenman, silinenlerin
+      ilki olur (C silindiyse sira yine C). */
+function entryUsable(e){ return e && e.kg != null && Array.isArray(e.reps) && e.reps.some(r => r != null); }
+function deleteSessions(idxSet){
+  const del = new Set([...idxSet].filter(i => i >= 0 && i < S.sessions.length));
+  if(!del.size) return;
+  const lastIdx = S.sessions.length - 1;
+
+  /* 1) agirlik geri alma — silmeden ONCE hesapla */
+  const ids = new Set();
+  del.forEach(i => Object.keys(S.sessions[i].entries || {}).forEach(id => ids.add(id)));
+  ids.forEach(id => {
+    const ex = findEx(id);
+    if(!ex || ex.type === "bw") return;
+    let latest = -1;
+    for(let i = lastIdx; i >= 0; i--){ if(entryUsable(S.sessions[i].entries[id])){ latest = i; break; } }
+    if(latest < 0 || !del.has(latest)) return;          // son kayit duruyor — agirlik zaten ona gore
+    const e = S.sessions[latest].entries[id];
+    const produced = progressDecision(ex, e.reps, e.rpe, e.kg).weight;
+    if(produced == null || S.weights[id] == null || Math.abs(S.weights[id] - produced) > 0.001) return;
+    let prev = null, firstDel = e;
+    for(let j = latest - 1; j >= 0; j--){
+      const pe = S.sessions[j].entries[id];
+      if(!entryUsable(pe)) continue;
+      if(del.has(j)){ firstDel = pe; continue; }
+      prev = pe; break;
+    }
+    const target = prev ? progressDecision(ex, prev.reps, prev.rpe, prev.kg).weight : firstDel.kg;
+    if(target != null && target > 0) S.weights[id] = target;
+  });
+
+  /* 2) sira geri alma */
+  if(del.has(lastIdx)){
+    let k = lastIdx;
+    while(k >= 0 && del.has(k)) k--;                    // k = kalan son antrenman
+    const firstGone = S.sessions[k + 1];
+    const oi = firstGone ? ORDER.indexOf(firstGone.w) : -1;
+    if(oi >= 0) S.nextIdx = oi;
+  }
+
+  S.sessions = S.sessions.filter((_, i) => !del.has(i));
+  save();
+}
 
 /* =========================================================
    PROGRAMS (Antrenmanlar tab)
@@ -3161,8 +3272,8 @@ window.toggleBell = function(){
   S.restBell = !S.restBell;
   save();
   /* Acildiysa dokunma anindayiz — sesi simdi ac ki daha sonra izin sorunu olmasin. */
-  if(S.restBell){ keepAliveOn(); setTimeout(()=>{ if(!restTimer) keepAliveOff(); }, 400); }
-  else keepAliveOff();
+  if(S.restBell){ keepAliveOn(); if(restTimer) nowPlayingOn(); setTimeout(()=>{ if(!restTimer) keepAliveOff(); }, 400); }
+  else { keepAliveOff(); nowPlayingOff(); }
   render();
 };
 /* ---- Pim listesi duzenleme ---- */
@@ -3310,30 +3421,32 @@ window.resetAll = function(){
 /* Sayac artik tik saymiyor: bitis ANI saklaniyor, kalan sure her
    cizimde gercek saatten hesaplaniyor. Baska uygulamaya gecince
    tarayici setInterval'i kissa da kissin, geri donunce rakam dogru. */
-let restTimer = null, restEnd = 0;
+let restTimer = null, restEnd = 0, restTotal = 0, restLabel = "";
 const mmss = s => `${Math.floor(s/60)}:${String(Math.max(0,s)%60).padStart(2,'0')}`;
 function restLeftSec(){ return restEnd ? Math.max(0, Math.ceil((restEnd - Date.now())/1000)) : 0; }
 
-function startRest(sec){
+function startRest(sec, label){
   stopRest();
   restEnd = Date.now() + sec*1000;
-  if(S.restBell) keepAliveOn();
+  restTotal = sec; restLabel = label || "";
+  if(S.restBell){ keepAliveOn(); nowPlayingOn(); }
   restTimer = setInterval(()=>{
-    if(restLeftSec() <= 0){ const t=restTimer; restTimer=null; clearInterval(t); restEnd=0; renderRest(); keepAliveOff(); buzz(); return; }
+    if(restLeftSec() <= 0){ const t=restTimer; restTimer=null; clearInterval(t); restEnd=0; restTotal=0; renderRest(); keepAliveOff(); nowPlayingOff(); buzz(); return; }
     renderRest();
   }, 250);
   renderRest();
 }
 function stopRest(){
   if(restTimer){ clearInterval(restTimer); restTimer=null; }
-  restEnd = 0; keepAliveOff(); renderRest();
+  restEnd = 0; restTotal = 0; keepAliveOff(); nowPlayingOff(); renderRest();
 }
 window.stopRest = stopRest;
-window.addRest = function(s){ if(restEnd){ restEnd += s*1000; renderRest(); } };
+window.addRest = function(s){ if(restEnd){ restEnd += s*1000; restTotal += s; npLast = -1; renderRest(); } };
 function renderRest(){
   const left = restLeftSec();
   document.body.classList.toggle("resting", !!(restTimer && left>0));
   if(!restTimer || left<=0){ $rest.innerHTML=""; return; }
+  nowPlayingTick(left);
   $rest.innerHTML = `<div class="restpill">
     <div class="dot"></div>
     <div class="t">${mmss(left)}</div>
@@ -3374,6 +3487,72 @@ function keepAliveOn(){
   }catch(e){}
 }
 function keepAliveOff(){ try{ if(kaEl){ kaEl.pause(); kaEl.currentTime = 0; } }catch(e){} }
+
+/* ---------- Dynamic Island / kilit ekrani (DENEME) ----------
+   PWA'lar Live Activity kullanamiyor. Ama mola sirasinda zaten calan sessiz
+   ses, Media Session bilgisiyle "su an calan" olarak gosterilebiliyor:
+   baslikta kalan sure, altta hareket adi, ilerleme cubugu. Sadece zil
+   ACIKKEN calisir — zil kapaliyken ses calmiyoruz (muzigini bolmemek icin). */
+let npLast = -1, npArt = null;
+function npArtwork(){
+  if(npArt) return npArt;
+  try{
+    const c = document.createElement("canvas"); c.width = c.height = 512;
+    const g = c.getContext("2d");
+    g.fillStyle = "#0A0B0D"; g.fillRect(0,0,512,512);
+    g.lineCap = "round";
+    g.strokeStyle = "#33363C"; g.lineWidth = 34;
+    g.beginPath(); g.arc(256,256,170,0,Math.PI*2); g.stroke();
+    g.strokeStyle = "#F5A623";
+    g.beginPath(); g.arc(256,256,170,-Math.PI/2,Math.PI*1.1); g.stroke();
+    g.strokeStyle = "#F7F7F8"; g.lineWidth = 26;
+    g.beginPath(); g.moveTo(256,256); g.lineTo(256,160); g.moveTo(256,256); g.lineTo(320,296); g.stroke();
+    npArt = c.toDataURL("image/png");
+  }catch(e){ npArt = ""; }
+  return npArt;
+}
+function nowPlayingOn(){
+  if(!("mediaSession" in navigator) || typeof MediaMetadata === "undefined") return;
+  try{
+    const ms = navigator.mediaSession;
+    ms.setActionHandler("pause", () => stopRest());           // durdur = molayi bitir
+    ms.setActionHandler("play", () => { if(kaEl) kaEl.play().catch(()=>{}); });
+    try{ ms.setActionHandler("seekforward", () => addRest(30)); }catch(e){}
+    try{ ms.setActionHandler("seekbackward", null); }catch(e){}
+    try{ ms.setActionHandler("seekto", null); }catch(e){}
+    npLast = -1;
+    nowPlayingTick(restLeftSec());
+  }catch(e){}
+}
+function nowPlayingTick(left){
+  if(!S.restBell || !("mediaSession" in navigator) || typeof MediaMetadata === "undefined") return;
+  if(left === npLast) return;
+  npLast = left;
+  try{
+    const art = npArtwork();
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: T("Dinlenme") + " · " + mmss(left),
+      artist: restLabel || T("Antrenman"),
+      album: "antreman",
+      artwork: art ? [{src: art, sizes: "512x512", type: "image/png"}] : []
+    });
+    navigator.mediaSession.playbackState = "playing";
+    if(navigator.mediaSession.setPositionState && restTotal > 0){
+      const dur = Math.max(restTotal, 1);
+      navigator.mediaSession.setPositionState({duration: dur, playbackRate: 1,
+        position: Math.min(dur, Math.max(0, dur - left))});
+    }
+  }catch(e){}
+}
+function nowPlayingOff(){
+  npLast = -1;
+  if(!("mediaSession" in navigator)) return;
+  try{
+    navigator.mediaSession.metadata = null;
+    navigator.mediaSession.playbackState = "none";
+    if(navigator.mediaSession.setPositionState) navigator.mediaSession.setPositionState();
+  }catch(e){}
+}
 
 function buzz(){
   if(!S.restBell) return;
@@ -3607,6 +3786,14 @@ function runMigrations(){
    ========================================================= */
 /* ---- CEVIRI SOZLUGU (anahtar = Turkce kaynak metin) ---- */
 Object.assign(I18N.en, {
+"{n} antrenman seçildi": "{n} selected",
+"Silmek istediklerini seç": "Select workouts to delete",
+"Sil": "Delete",
+"İptal": "Cancel",
+"Seç": "Select",
+"Bu antrenman silinecek. Bu geri alınamaz.\n\nSilinsin mi?": "This workout will be deleted. This can't be undone.\n\nDelete it?",
+"{n} antrenman silinecek. Bu geri alınamaz.\n\nSilinsin mi?": "{n} workouts will be deleted. This can't be undone.\n\nDelete them?",
+"Dinlenme": "Rest",
 "Bilinmeyen antrenman ({k})": "Unknown workout ({k})",
 "Bilinmeyen antrenman": "Unknown workout",
 "Antrenman": "Workout",
@@ -3851,6 +4038,14 @@ Object.assign(I18N.en, {
 "Yarım kalmış bir {name} antrenmanın var{ago}.\n\nKaldığın yerden devam etmek ister misin?\n\nTamam = devam et\nİptal = bu antrenmanı sil": "You have an unfinished {name} workout{ago}.\n\nDo you want to continue where you left off?\n\nOK = continue\nCancel = delete this workout"
 });
 Object.assign(I18N.fi, {
+"{n} antrenman seçildi": "{n} valittu",
+"Silmek istediklerini seç": "Valitse poistettavat treenit",
+"Sil": "Poista",
+"İptal": "Peruuta",
+"Seç": "Valitse",
+"Bu antrenman silinecek. Bu geri alınamaz.\n\nSilinsin mi?": "Tämä treeni poistetaan. Tätä ei voi perua.\n\nPoistetaanko?",
+"{n} antrenman silinecek. Bu geri alınamaz.\n\nSilinsin mi?": "{n} treeniä poistetaan. Tätä ei voi perua.\n\nPoistetaanko?",
+"Dinlenme": "Lepo",
 "Bilinmeyen antrenman ({k})": "Tuntematon treeni ({k})",
 "Bilinmeyen antrenman": "Tuntematon treeni",
 "Antrenman": "Treeni",
